@@ -31,50 +31,7 @@ liegen bereits vendored in [`.claude/skills/`](.claude/skills/) in diesem Repo �
 | – | Feedback-Runde                                               | Rückmeldung zur Übung einsammeln                                      | 5 min         |
 |   |                                                               | **Gesamt**                                                            | **80–85 min** |
 
-### Workflow in Phasen
-
-```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'fontSize':'20px', 'primaryBorderColor':'#888'}}}%%
-flowchart TD
-    subgraph P0["👋 Kickoff"]
-        direction LR
-        A0["Begrüßung"] --> A1["Setup"] --> A2["Übung 0<br/>Projekt verstehen"]
-    end
-    subgraph P1["🗣️ Klären &amp; Spezifizieren"]
-        B["Übung 1<br/>interview-me +<br/>spec-driven-development"]
-    end
-    subgraph P2["✅ Verifizierung / Contract bauen"]
-        C["Übung 2<br/>test-driven-development"]
-    end
-    subgraph P3["🛠️ Planen &amp; Umsetzen"]
-        D["Übung 3<br/>planning-and-task-breakdown +<br/>incremental-implementation"]
-    end
-    subgraph P4["🔍 Review"]
-        E["Übung 4<br/>code-review-and-quality +<br/>code-simplification"]
-    end
-    subgraph P5["🔁 Reflektieren"]
-        F["Übung 5<br/>Fix the loop"]
-    end
-    G["💬 Feedback-Runde"]
-
-    P0 --> P1 --> P2 --> P3 --> P4 --> P5 --> G
-
-    classDef kickoff fill:#e0f2fe,stroke:#0284c7,stroke-width:1px,color:#0c4a6e;
-    classDef clarify fill:#fef3c7,stroke:#d97706,stroke-width:1px,color:#78350f;
-    classDef verify fill:#dcfce7,stroke:#16a34a,stroke-width:1px,color:#14532d;
-    classDef build fill:#ede9fe,stroke:#7c3aed,stroke-width:1px,color:#4c1d95;
-    classDef review fill:#fee2e2,stroke:#dc2626,stroke-width:1px,color:#7f1d1d;
-    classDef reflect fill:#f1f5f9,stroke:#475569,stroke-width:1px,color:#1e293b;
-    classDef feedback fill:#fdf4ff,stroke:#a21caf,stroke-width:2px,color:#701a75;
-
-    class A0,A1,A2 kickoff
-    class B clarify
-    class C verify
-    class D build
-    class E review
-    class F reflect
-    class G feedback
-```
+Wie die Phasen und Skills zusammenhängen, zeigt das Zielbild im [`README`](README.md#zielbild-in-phasen-arbeiten).
 
 ### Begrüßung
 
