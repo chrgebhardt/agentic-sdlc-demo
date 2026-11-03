@@ -6,9 +6,10 @@ Osmani](https://github.com/addyosmani/agent-skills).
 
 ## Inhalt
 
-- [`src/`](src/) / `pom.xml` — Spring Boot REST-Service zur Depotverwaltung
-  (Java 21, Maven). Enthält bereits Lesezugriffe auf Depots/Positionen samt
-  Tests; die eigentliche Übungsaufgabe ist noch nicht implementiert.
+- [`src/`](src/) / `build.gradle` — Spring Boot REST-Service zur
+  Depotverwaltung (Java 21, Gradle 9.5.0). Enthält bereits Lesezugriffe auf
+  Depots/Positionen samt Tests; die eigentliche Übungsaufgabe ist noch nicht
+  implementiert.
 - [`docs/architecture.md`](docs/architecture.md) — Architektur (Onion
   Architecture, `domain`/`app`/`infra`).
 - [`ticket.md`](ticket.md) — das Ticket, mit dem die Übung startet.
@@ -21,10 +22,11 @@ Osmani](https://github.com/addyosmani/agent-skills).
 
 ## Setup
 
-Voraussetzungen: Java 21, Claude Code.
+Voraussetzungen: Java 21, Claude Code. Gradle 9.5.0 wird über den Wrapper
+(`./gradlew`) automatisch geladen — keine lokale Gradle-Installation nötig.
 
 ```bash
-./mvnw test
+./gradlew test
 ```
 
 Alle Tests sollten grün sein — das ist der Ausgangszustand der Übung.

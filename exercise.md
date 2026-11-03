@@ -39,8 +39,10 @@ welcher Flughöhe das Training stattfindet (eher Einstieg oder eher in die Tiefe
 
 ### Setup
 
+Abhängigkeit: Gradle 9.5.0 (wird über `./gradlew` automatisch geladen, keine lokale Installation nötig).
+
 ```bash
-./mvnw test
+./gradlew test
 ```
 
 Alle Tests sollten grün sein. Das sind die **harten Tests** — sie beschreiben bestehendes, bereits korrektes Verhalten
