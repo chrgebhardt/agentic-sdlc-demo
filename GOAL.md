@@ -10,6 +10,9 @@ Zieldokument für dieses Training. Wird gemeinsam weiter iteriert.
   `code-simplification`
 - Claude-Code-Basics als Cheat-Sheet (Befehle, Worktrees)
 - Zentrale Learnings:
+  - In Phasen arbeiten (Klären → Festhalten → Umsetzen → Prüfen) statt das
+    Ticket zu one-shotten; jedes Artefakt prüfen, bevor das nächste darauf
+    aufbaut (Zielbild im README)
   - Harness (CLAUDE.md/Docs) permanent verbessern — "fix the loop"
   - Unsicherheiten früh klären, gemeinsames Verständnis mit Agent schaffen
   - Verifikation (Spec + Tests) kollaborativ vor der Implementierung bauen
