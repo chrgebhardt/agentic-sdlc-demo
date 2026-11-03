@@ -22,7 +22,8 @@ Osmani](https://github.com/addyosmani/agent-skills).
 
 ## Setup
 
-Voraussetzungen: Java 21, Claude Code. Gradle 9.5.0 wird über den Wrapper
+Voraussetzung: Das Coder-Setup muss bereits durchgeführt sein, inkl. eingerichtetem Java-Proxy (siehe Einladungsmail).
+Außerdem nötig: Java 21, Claude Code. Gradle 9.5.0 wird über den Wrapper
 (`./gradlew`) automatisch geladen — keine lokale Gradle-Installation nötig.
 
 ```bash
@@ -30,6 +31,9 @@ Voraussetzungen: Java 21, Claude Code. Gradle 9.5.0 wird über den Wrapper
 ```
 
 Alle Tests sollten grün sein — das ist der Ausgangszustand der Übung.
+
+Öffne anschließend Claude Code im Repo-Root und prüfe mit `/skills`, dass die vendored agent-skills erkannt werden —
+`interview-me` sollte in der Liste auftauchen.
 
 ## Ablauf
 

@@ -39,7 +39,8 @@ welcher Flughöhe das Training stattfindet (eher Einstieg oder eher in die Tiefe
 
 ### Setup
 
-Abhängigkeit: Gradle 9.5.0 (wird über `./gradlew` automatisch geladen, keine lokale Installation nötig).
+Voraussetzung: Das Coder-Setup muss bereits durchgeführt sein, inkl. eingerichtetem Java-Proxy (siehe Einladungsmail).
+Gradle 9.5.0 wird über `./gradlew` automatisch geladen, keine lokale Installation nötig.
 
 ```bash
 ./gradlew test
