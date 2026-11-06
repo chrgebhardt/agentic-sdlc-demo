@@ -3,6 +3,16 @@
 **Dauer:** 60–90 Minuten (Praxis-Teil, nach einer kurzen Theorie-Einheit)
 **Repo:** Spring Boot REST-Service zur Depotverwaltung **Ticket:** [`ticket.md`](ticket.md)
 
+## Vorbereitung (vor der Session)
+
+Vorab sollte eine Einladungsmail mit dem Setup an die Teilnehmenden verschickt werden. Sie sollte abdecken:
+
+- Zugang zu Coder
+- Zugang zu Claude Code
+- Repo klonen
+- `JAVA_TOOLS` (Proxy) konfigurieren (für Gradle)
+- Tests ausführen (`./gradlew test`), um das Setup zu verifizieren
+
 ## Ziel
 
 Durchlaufe den kompletten Workflow von einem Ticket bis zu einem review-fähigen Pull Request — nicht werkzeug-, sondern
