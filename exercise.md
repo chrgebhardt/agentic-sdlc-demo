@@ -43,6 +43,11 @@ liegen bereits vendored in [`.claude/skills/`](.claude/skills/) in diesem Repo �
 
 Wie die Phasen und Skills zusammenhängen, zeigt das Zielbild im [`README`](README.md#zielbild-in-phasen-arbeiten).
 
+### Übungsformat
+
+Je nach vorhandener Zeit führen die Teilnehmenden die Übung selbstständig durch (bei Problemen gerne im Chat posten
+oder um Hilfe fragen). Anschließend wird die Übung gemeinsam diskutiert bzw. noch einmal präsentiert.
+
 ### Begrüßung
 
 Kurze Vorstellungsrunde. Frag ab, wer bereits Erfahrung mit Claude Code hat (noch nie benutzt / schon mal ausprobiert /
