@@ -38,6 +38,10 @@ public class OrderService {
                 .orElseThrow(() -> new NoSuchElementException("Wertpapier not found: " + wertpapierId));
 
         BigDecimal totalCost = quantity.multiply(wertpapier.getPrice()).setScale(2, RoundingMode.HALF_UP);
+        if (totalCost.compareTo(depot.getCashBalance()) > 0) {
+            throw new IllegalArgumentException(
+                    "Insufficient balance: required " + totalCost + ", available " + depot.getCashBalance());
+        }
 
         depot.setCashBalance(depot.getCashBalance().subtract(totalCost));
         positionRepository.findByDepotIdAndWertpapierId(depotId, wertpapierId).ifPresentOrElse(
