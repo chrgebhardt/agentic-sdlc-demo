@@ -222,6 +222,45 @@ class OrderControllerIntegrationTest {
                 .andExpect(jsonPath("$[0].quantity").value(10));
     }
 
+    @ParameterizedTest(name = "quantity = {0}")
+    @ValueSource(strings = {"0.001", "1.005", "1e-30"})
+    @DisplayName("Stückzahl mit mehr als 2 Nachkommastellen wird mit 400 abgelehnt, "
+            + "ohne Guthaben oder Positionen zu verändern")
+    void placeOrder_quantityWithMoreThanTwoDecimals_returns400WithoutSideEffects(String quantity) throws Exception {
+        // given
+        Depot depot = givenDepot("10000.00");
+        Wertpapier apple = givenWertpapier("AAPL", "150.00");
+        givenPosition(depot, apple, "10");
+
+        // when
+        ResultActions result = placeOrder(depot.getId(), apple.getId(), quantity);
+
+        // then
+        result.andExpect(status().isBadRequest())
+                .andExpect(content().string("quantity must have at most 2 decimal places"));
+
+        mockMvc.perform(get("/api/depots/{id}", depot.getId()))
+                .andExpect(jsonPath("$.cashBalance").value(10000.00));
+        mockMvc.perform(get("/api/depots/{id}/positions", depot.getId()))
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].quantity").value(10));
+    }
+
+    @Test
+    @DisplayName("Stückzahl mit überzähligen Nullen nach der 2. Nachkommastelle wird akzeptiert")
+    void placeOrder_quantityWithTrailingZeros_isAccepted() throws Exception {
+        // given
+        Depot depot = givenDepot("10000.00");
+        Wertpapier apple = givenWertpapier("AAPL", "150.00");
+
+        // when
+        ResultActions result = placeOrder(depot.getId(), apple.getId(), "0.250");
+
+        // then
+        result.andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalCost").value(37.50));
+    }
+
     @Test
     @DisplayName("Fehlende Stückzahl wird mit 400 abgelehnt, ohne das Guthaben zu verändern")
     void placeOrder_missingQuantity_returns400WithoutSideEffects() throws Exception {

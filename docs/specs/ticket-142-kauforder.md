@@ -77,7 +77,9 @@ Response 200 OK:
 |---|---|---|
 | Depot nicht gefunden | 404 | `Depot not found: {id}` |
 | Wertpapier nicht gefunden | 404 | `Wertpapier not found: {id}` |
+| `wertpapierId` bzw. `quantity` fehlt | 400 | `wertpapierId must not be null` / `quantity must not be null` |
 | `quantity <= 0` | 400 | `Quantity must be positive` |
+| `quantity` mit mehr als 2 Nachkommastellen | 400 | `quantity must have at most 2 decimal places` |
 | Guthaben reicht nicht | 400 | `Insufficient balance: required {totalCost}, available {cashBalance}` |
 
 Abgelehnte Orders dürfen keine Seiteneffekte haben (kein teilweiser Abzug vom
