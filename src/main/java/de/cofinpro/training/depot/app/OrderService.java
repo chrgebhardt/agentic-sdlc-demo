@@ -29,6 +29,9 @@ public class OrderService {
 
     @Transactional
     public OrderConfirmation placeOrder(Long depotId, Long wertpapierId, BigDecimal quantity) {
+        if (quantity.signum() <= 0) {
+            throw new IllegalArgumentException("Quantity must be positive");
+        }
         Depot depot = depotRepository.findById(depotId)
                 .orElseThrow(() -> new NoSuchElementException("Depot not found: " + depotId));
         Wertpapier wertpapier = wertpapierRepository.findById(wertpapierId)
