@@ -75,8 +75,8 @@ eine definierte Teilmenge grün und darf keinen bisher grünen Test rot machen.
 
 ### Phase 1: Happy Path
 
-- [ ] Task 1: Kauf auf bestehende Position (Walking Skeleton)
-- [ ] Task 2: Erstkauf legt neue Position an
+- [x] Task 1: Kauf auf bestehende Position (Walking Skeleton)
+- [x] Task 2: Erstkauf legt neue Position an
 
 ### Checkpoint A
 - [ ] 4 von 10 Order-Tests grün, `DepotControllerIntegrationTest` grün
@@ -84,9 +84,9 @@ eine definierte Teilmenge grün und darf keinen bisher grünen Test rot machen.
 
 ### Phase 2: Fehlerfälle
 
-- [ ] Task 3: Unbekanntes Depot / Wertpapier → 404
-- [ ] Task 4: Nicht-positive Stückzahl → 400
-- [ ] Task 5: Unzureichendes Guthaben → 400
+- [x] Task 3: Unbekanntes Depot / Wertpapier → 404
+- [x] Task 4: Nicht-positive Stückzahl → 400
+- [x] Task 5: Unzureichendes Guthaben → 400
 
 ### Checkpoint B (Complete)
 - [ ] `./gradlew build` grün (alle Tests)
@@ -95,7 +95,7 @@ eine definierte Teilmenge grün und darf keinen bisher grünen Test rot machen.
 
 ### Phase 3: Abschluss
 
-- [ ] Task 6: Doku nachziehen (`CLAUDE.md`, Spec)
+- [x] Task 6: Doku nachziehen (`CLAUDE.md`, Spec)
 
 Details zu jedem Task: `tasks/todo.md`.
 

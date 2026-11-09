@@ -39,11 +39,12 @@ Run:   ./gradlew bootRun
 
 ```
 src/main/java/.../app/OrderService.java          → neu: Fachlogik Kauforder
+src/main/java/.../app/OrderConfirmation.java     → neu: Ergebnis-Record des Service
 src/main/java/.../infra/web/OrderRequest.java     → neu: Request-DTO
 src/main/java/.../infra/web/OrderResponse.java    → neu: Response-DTO
-src/main/java/.../infra/web/DepotController.java  → ergänzt: POST-Endpoint
+src/main/java/.../infra/web/OrderController.java  → neu: POST-Endpoint
 src/main/java/.../infra/web/ApiExceptionHandler.java → ergänzt: 400-Mapping
-src/test/java/.../infra/web/DepotControllerIntegrationTest.java → ergänzt
+src/test/java/.../infra/web/OrderControllerIntegrationTest.java → neu
 ```
 
 Kein neues Repository, keine neue Entity — passend zum bestehenden
@@ -105,9 +106,9 @@ Depot+Wertpapier, wird deren `quantity` erhöht; sonst wird eine neue
 
 ## Testing Strategy
 
-- Integrationstests via `@SpringBootTest` + `MockMvc`, analog
-  `DepotControllerIntegrationTest`, gegen die von `DemoDataLoader` befüllte
-  H2-Datenbank.
+- Integrationstests via `@SpringBootTest` + `MockMvc` in
+  `OrderControllerIntegrationTest`. Jeder Test legt seine Daten selbst an und
+  läuft in einer zurückgerollten Transaktion (unabhängig vom `DemoDataLoader`).
 - Abzudeckende Fälle:
   1. Erfolgreiche Order auf bestehende Position (AAPL, Depot 1) → 200,
      korrekte Response-Werte, Guthaben und Position in der DB aktualisiert.
@@ -134,29 +135,27 @@ Depot+Wertpapier, wird deren `quantity` erhöht; sonst wird eine neue
 
 ## Success Criteria
 
-- [ ] `POST /api/depots/1/orders` mit gültiger `wertpapierId`+`quantity`
+- [x] `POST /api/depots/1/orders` mit gültiger `wertpapierId`+`quantity`
       liefert 200 mit korrektem `pricePerUnit`, `totalCost` und
       `newCashBalance`.
-- [ ] Guthaben des Depots ist nach der Order um `totalCost` reduziert.
-- [ ] Position zeigt die erhöhte Stückzahl (bzw. neue Position bei
+- [x] Guthaben des Depots ist nach der Order um `totalCost` reduziert.
+- [x] Position zeigt die erhöhte Stückzahl (bzw. neue Position bei
       Erstkauf eines Wertpapiers).
-- [ ] Unbekanntes Depot/Wertpapier → 404.
-- [ ] `quantity <= 0` → 400, keine Seiteneffekte.
-- [ ] Bestellwert > Guthaben → 400, keine Seiteneffekte.
-- [ ] Alle Tests grün (`./gradlew test`).
+- [x] Unbekanntes Depot/Wertpapier → 404.
+- [x] `quantity <= 0` → 400, keine Seiteneffekte.
+- [x] Bestellwert > Guthaben → 400, keine Seiteneffekte.
+- [x] Alle Tests grün (`./gradlew test`).
 
 ## Open Questions
 
 1. **Rundung von `totalCost`:** Soll `quantity * price` auf 2 Nachkommastellen
    gerundet werden (HALF_UP, wie für Geldbeträge üblich), oder wird die
    rohe `BigDecimal`-Multiplikation ohne explizites Rounding
-   zurückgegeben? *Annahme für die Implementierung: Rundung auf 2
-   Nachkommastellen, HALF_UP.*
+   zurückgegeben? **Entschieden:** Rundung auf 2 Nachkommastellen, HALF_UP
+   (durch Test abgesichert).
 2. **Mehrere Positionen pro Wertpapier:** Angenommen wird, dass pro
    Depot+Wertpapier maximal eine `Position`-Zeile existiert (Merge statt
    Duplikat). Das entspricht dem Demo-Datenmodell, wurde aber nicht
    explizit mit dem Kunden bestätigt.
-3. **Endpoint-Ort:** Der neue Endpoint wird in den bestehenden
-   `DepotController` aufgenommen (analog zu `/positions`) statt in einen
-   eigenen `OrderController` ausgelagert — passend zur Nesting-Konvention
-   `/api/depots/{id}/...`.
+3. **Endpoint-Ort:** **Entschieden:** eigener `OrderController` unter
+   `/api/depots/{id}/orders` (Nesting-Konvention bleibt erhalten).
