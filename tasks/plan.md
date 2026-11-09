@@ -39,15 +39,15 @@ OrderRequest / OrderResponse  →  POST-Mapping im DepotController
 
 ## Architecture Decisions
 
-- **Endpoint im `DepotController`** (Spec Open Question 3), obwohl die
-  Testklasse `OrderControllerIntegrationTest` heißt. Der Test prüft nur URL und
-  Verhalten, nicht die Controller-Klasse — beide Varianten sind testneutral.
+- **Eigener `OrderController`** unter `@RequestMapping("/api/depots")`, passend
+  zur Testklasse `OrderControllerIntegrationTest` (entschieden, weicht von Spec
+  Open Question 3 ab).
 - **`OrderService` in `app/`, `@Transactional`**, Konstruktor-Injection.
   Signatur `placeOrder(Long depotId, Long wertpapierId, BigDecimal quantity)` —
   nimmt keine Web-DTOs entgegen.
-- **Rückgabetyp:** `OrderService` liefert `OrderResponse` direkt, analog
-  `DepotQueryService` (bestehendes Muster im Projekt, auch wenn es `app → infra`
-  verletzt). Alternative siehe Open Questions.
+- **Rückgabetyp:** `OrderService` liefert den app-Record `OrderConfirmation`;
+  `OrderController` bildet ihn auf `OrderResponse` ab. Damit kennt `app` keine
+  Web-DTOs (onion-konform, entschieden).
 - **Validieren vor Mutieren:** Reihenfolge im Service ist
   1. `quantity > 0` (400) → 2. Depot laden (404) → 3. Wertpapier laden (404)
   → 4. `totalCost` berechnen und Guthaben prüfen (400) → 5. erst dann
@@ -108,13 +108,8 @@ Details zu jedem Task: `tasks/todo.md`.
 | Vergleich `jsonPath(...).value(10)` vs. `15.0` gegen `BigDecimal` mit Scale 2 | Low | Läuft im bestehenden `DepotControllerIntegrationTest` bereits mit `value(10)`; im Task 1 früh verifiziert. |
 | Task 3 ist nach Task 1/2 evtl. schon grün (`orElseThrow` aus Task 1) | Low | Dann ist Task 3 nur Verifikation + Prüfung der Prüfreihenfolge; Commit entfällt ggf. oder wird mit Task 1 zusammengelegt. |
 
-## Open Questions
+## Entschiedene Fragen
 
-1. **Onion-Verletzung:** `DepotQueryService` (app) importiert bereits
-   `infra.web`-DTOs. Sollen wir für `OrderService` das bestehende Muster
-   übernehmen (Plan-Default) oder sauber trennen (app-Record
-   `OrderConfirmation`, Mapping auf `OrderResponse` im Controller, +1 Datei)?
-2. **Rote Zwischen-Commits:** OK so, oder lieber `@Disabled` pro noch nicht
-   umgesetztem Test, damit jeder Commit `./gradlew build`-grün ist?
-3. **Controller-Ort:** `DepotController` (Spec) oder eigener `OrderController`
-   (Name der Testklasse)?
+1. Onion: eigener app-Record `OrderConfirmation`, Mapping im Controller.
+2. Rote Zwischen-Commits sind für die TDD-Übung in Ordnung.
+3. Endpoint in eigenem `OrderController`.

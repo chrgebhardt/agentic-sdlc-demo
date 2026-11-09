@@ -29,10 +29,11 @@ nicht behandelt.
 - `…/infra/persistence/PositionRepository.java` (+ `Optional<Position> findByDepotIdAndWertpapierId(Long, Long)`)
 - `…/app/OrderService.java` (neu)
 - `…/infra/web/OrderRequest.java` (neu, Record `wertpapierId`, `quantity`)
+- `…/app/OrderConfirmation.java` (neu, app-Record als Rückgabe des Service)
 - `…/infra/web/OrderResponse.java` (neu, Record)
-- `…/infra/web/DepotController.java` (+ `@PostMapping("/{depotId}/orders")`)
+- `…/infra/web/OrderController.java` (neu, `@PostMapping("/{depotId}/orders")`, mappt `OrderConfirmation` → `OrderResponse`)
 
-**Estimated scope:** M (5 Dateien, davon 3 neu und sehr klein)
+**Estimated scope:** M (6 Dateien, davon 5 neu und sehr klein)
 
 **Commit:** `TICKET-142: Kauforder auf bestehende Position ausführen`
 
