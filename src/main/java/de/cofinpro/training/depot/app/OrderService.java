@@ -30,7 +30,7 @@ public class OrderService {
     @Transactional
     public OrderConfirmation placeOrder(Long depotId, Long wertpapierId, BigDecimal quantity) {
         if (quantity.signum() <= 0) {
-            throw new IllegalArgumentException("Quantity must be positive");
+            throw new OrderRejectedException("Quantity must be positive");
         }
         Depot depot = depotRepository.findById(depotId)
                 .orElseThrow(() -> new NoSuchElementException("Depot not found: " + depotId));
@@ -39,7 +39,7 @@ public class OrderService {
 
         BigDecimal totalCost = quantity.multiply(wertpapier.getPrice()).setScale(2, RoundingMode.HALF_UP);
         if (totalCost.compareTo(depot.getCashBalance()) > 0) {
-            throw new IllegalArgumentException(
+            throw new OrderRejectedException(
                     "Insufficient balance: required " + totalCost + ", available " + depot.getCashBalance());
         }
 

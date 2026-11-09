@@ -1,5 +1,6 @@
 package de.cofinpro.training.depot.infra.web;
 
+import de.cofinpro.training.depot.app.OrderRejectedException;
 import org.springframework.context.support.DefaultMessageSourceResolvable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -18,8 +19,8 @@ public class ApiExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ex.getMessage());
     }
 
-    @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<String> handleBadRequest(IllegalArgumentException ex) {
+    @ExceptionHandler(OrderRejectedException.class)
+    public ResponseEntity<String> handleOrderRejected(OrderRejectedException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());
     }
 

@@ -103,8 +103,12 @@ Depot+Wertpapier, wird deren `quantity` erhöht; sonst wird eine neue
 - Fehlerfälle als Exceptions, gemappt über `ApiExceptionHandler`:
   - `NoSuchElementException` → 404 (bereits vorhanden, wiederverwendet für
     Depot/Wertpapier-Lookup)
-  - `IllegalArgumentException` → 400 (neu zu ergänzen, für Stückzahl- und
-    Guthaben-Validierung)
+  - `OrderRejectedException` (in `app/`) → 400, für Stückzahl- und
+    Guthaben-Validierung. Bewusst keine generische
+    `IllegalArgumentException`, damit Framework- und Programmierfehler
+    nicht als 400 mit interner Meldung beim Client landen.
+  - `MethodArgumentNotValidException` → 400, für Bean Validation des
+    Request-Bodys (fehlende Felder, zu viele Nachkommastellen)
 
 ## Testing Strategy
 
