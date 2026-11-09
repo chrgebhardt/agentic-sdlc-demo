@@ -222,6 +222,45 @@ class OrderControllerIntegrationTest {
                 .andExpect(jsonPath("$[0].quantity").value(10));
     }
 
+    @Test
+    @DisplayName("Fehlende Stückzahl wird mit 400 abgelehnt, ohne das Guthaben zu verändern")
+    void placeOrder_missingQuantity_returns400WithoutSideEffects() throws Exception {
+        // given
+        Depot depot = givenDepot("10000.00");
+        Wertpapier apple = givenWertpapier("AAPL", "150.00");
+
+        // when
+        ResultActions result = placeOrderWithBody(depot.getId(), """
+                { "wertpapierId": %d }
+                """.formatted(apple.getId()));
+
+        // then
+        result.andExpect(status().isBadRequest())
+                .andExpect(content().string("quantity must not be null"));
+
+        mockMvc.perform(get("/api/depots/{id}", depot.getId()))
+                .andExpect(jsonPath("$.cashBalance").value(10000.00));
+    }
+
+    @Test
+    @DisplayName("Fehlende Wertpapier-ID wird mit 400 abgelehnt, ohne das Guthaben zu verändern")
+    void placeOrder_missingWertpapierId_returns400WithoutSideEffects() throws Exception {
+        // given
+        Depot depot = givenDepot("10000.00");
+
+        // when
+        ResultActions result = placeOrderWithBody(depot.getId(), """
+                { "quantity": 5.0 }
+                """);
+
+        // then
+        result.andExpect(status().isBadRequest())
+                .andExpect(content().string("wertpapierId must not be null"));
+
+        mockMvc.perform(get("/api/depots/{id}", depot.getId()))
+                .andExpect(jsonPath("$.cashBalance").value(10000.00));
+    }
+
     private Depot givenDepot(String cashBalance) {
         return depotRepository.save(new Depot(null, "Erika Musterfrau", new BigDecimal(cashBalance)));
     }
@@ -235,10 +274,14 @@ class OrderControllerIntegrationTest {
     }
 
     private ResultActions placeOrder(long depotId, long wertpapierId, String quantity) throws Exception {
+        return placeOrderWithBody(depotId, """
+                { "wertpapierId": %d, "quantity": %s }
+                """.formatted(wertpapierId, quantity));
+    }
+
+    private ResultActions placeOrderWithBody(long depotId, String json) throws Exception {
         return mockMvc.perform(post("/api/depots/{id}/orders", depotId)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("""
-                        { "wertpapierId": %d, "quantity": %s }
-                        """.formatted(wertpapierId, quantity)));
+                .content(json));
     }
 }
