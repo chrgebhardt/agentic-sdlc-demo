@@ -1,0 +1,718 @@
+ ▐▛███▛█   Claude Code v2.1.311
+▝▜██████▀  Opus 5.5 · Claude Team
+ ▝▝   ▝▝   ~/Desktop/Cofinpro/Training/agentic-sdlc-demo
+
+  Opus 5.5 is now your default model and it draws down usage faster than Sonnet 5. Switch anytime with /model.
+
+❯ /clear                                                                        
+
+❯ /code-review-and-quality ich würde gerne den code stand des branches kritisch 
+mit den Anforderungen aus @docs/specs/ticket-142-kauforder.md,                  
+@docs/specs/ticket-142-kauforder.md vergleichen auf Funktionalität, sowie Code  
+Qualität                                                                        
+  ⎿  Read docs/specs/ticket-142-kauforder.md (162 lines)
+
+  Read 1 file, ran 3 shell commands (ctrl+o to expand)
+
+⏺ Tests grün. Jetzt prüfe ich die Randfälle, die die Tests nicht abdecken, gegen
+  die laufende App.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Review: TICKET-142 – Kauforder (Branch excerise-test gegen main)
+
+  Kontext und Verifikation
+
+  - Ich habe die Spec docs/specs/ticket-142-kauforder.md mit allen Dateien unter
+    app/, domain/ und infra/ sowie mit dem Integrationstest verglichen.
+  - ./gradlew test ist grün: 14 Tests, 10 davon in
+    OrderControllerIntegrationTest.
+  - Zusätzlich habe ich die App gestartet und Randfälle per curl ausprobiert.
+    Die Ergebnisse unten sind gemessen, nicht vermutet.
+
+  Abgleich mit der Spec
+
+  ┌─────────────────────────────────────────────────────────────────┬────────┐
+  │                           Anforderung                           │ Status │
+  ├─────────────────────────────────────────────────────────────────┼────────┤
+  │ Kauf auf bestehende Position → 200 mit korrekten Werten,        │ ✅     │
+  │ Guthaben und Position angepasst                                 │        │
+  ├─────────────────────────────────────────────────────────────────┼────────┤
+  │ Erstkauf legt neue Position an                                  │ ✅     │
+  ├─────────────────────────────────────────────────────────────────┼────────┤
+  │ Unbekanntes Depot oder Wertpapier → 404 mit Spec-Text           │ ✅     │
+  ├─────────────────────────────────────────────────────────────────┼────────┤
+  │ quantity <= 0 → 400 ohne Seiteneffekte                          │ ✅     │
+  ├─────────────────────────────────────────────────────────────────┼────────┤
+  │ Guthaben reicht nicht → 400 ohne Seiteneffekte                  │ ✅     │
+  ├─────────────────────────────────────────────────────────────────┼────────┤
+  │ totalCost auf 2 Stellen HALF_UP gerundet, mit Test              │ ✅     │
+  ├─────────────────────────────────────────────────────────────────┼────────┤
+  │ Dateistruktur, Records, Konstruktor-Injection, BigDecimal       │ ✅     │
+  ├─────────────────────────────────────────────────────────────────┼────────┤
+  │ Kein Order-Objekt, keine Historie                               │ ✅     │
+  └─────────────────────────────────────────────────────────────────┴────────┘
+
+  Die Spec ist vollständig umgesetzt, und die Tests passen sauber zu den sechs
+  geforderten Fällen. Die Spec beschreibt allerdings nur den Normalfall gut. Die
+  folgenden Befunde liegen in Lücken, die sie offen lässt.
+
+  ---
+
+  Befunde (nach Schwere)
+
+  1. Critical: Parallele Orders verlieren Updates, Guthaben und Bestand passen 
+  danach nicht mehr zusammen
+
+  OrderService.java:46-49 liest Guthaben und Position, ändert sie und schreibt
+  sie zurück. Es gibt weder Locking noch @Version.
+
+  Gemessen: 20 parallele Orders über je 5 AAPL (je 750,00) bei 9.999,50
+  Guthaben:
+  - Alle 20 Orders bekamen 200.
+  - Bei korrekter Verarbeitung wären höchstens 13 Orders gedeckt gewesen.
+  - Vom Guthaben wurden nur 4.500,00 abgezogen. Das entspricht 6 Orders.
+  - Die Position wuchs um 35 Stück. Das entspricht 7 Orders.
+
+  Der Kunde hat also 20 Bestätigungen, das Geld ist nur für 6 Orders weg, und
+  die Stückzahl passt zu keinem der beiden Werte. Für einen Depot-Service ist
+  das ein Datenintegritätsfehler. Die Prüfung „Guthaben reicht nicht“ kann so
+  umgangen werden.
+
+  Vorschlag:
+  - Den Depot-Datensatz pessimistisch sperren, z.B. @Lock(PESSIMISTIC_WRITE) auf
+    einer findByIdForUpdate-Methode im DepotRepository. Weil alle Orders eines
+    Depots dann nacheinander laufen, ist auch die Position geschützt.
+  - Alternativ @Version auf Depot und Position mit einem Mapping auf 409.
+
+  Die Spec erwähnt Nebenläufigkeit nicht. Deshalb würde ich das mit dem
+  Ticket-Owner klären und nicht stillschweigend ins Ticket ziehen. Ohne Fix
+  sollte der Code aber nicht gemergt werden.
+
+  2. Critical: Stückzahlen werden beim Speichern stillschweigend auf 2 
+  Nachkommastellen gerundet, Kunde zahlt für 0 Stück
+
+  Position.quantity hat keine @Column-Angabe. Hibernate legt die Spalte deshalb
+  als numeric(38,2) an.
+
+  Gemessen:
+  - {"wertpapierId":3,"quantity":0.001} → 200, totalCost: 0.02, Guthaben sinkt.
+    Die Position wird aber mit quantity: 0.00 gespeichert. Der Kunde hat bezahlt
+    und nichts bekommen.
+  - quantity: 1e-30 → 200 mit totalCost: 0.00. Die Order wird also kostenlos
+    ausgeführt, und es entsteht ein sinnloser Eintrag.
+
+  Die Response meldet dabei eine andere Stückzahl, als tatsächlich gespeichert
+  wird.
+
+  Vorschlag: Die zulässige Genauigkeit fachlich festlegen, z.B. ganze Stück oder
+  4 Nachkommastellen. Dann:
+  - Die Spalte passend definieren, z.B. @Column(precision = 19, scale = 4).
+  - Mehr Nachkommastellen mit 400 ablehnen, z.B. über
+    quantity.stripTrailingZeros().scale() > 4 oder @Digits.
+  - Optional Orders mit totalCost == 0 ablehnen.
+
+  Dafür muss die Spec ergänzt werden. Die offene Frage 1 hat nur die Rundung von
+  totalCost geklärt, nicht die Genauigkeit der Stückzahl.
+
+  3. Required: Fehlende Felder im Request führen zu 500 bzw. zu einer internen 
+  Meldung
+
+  Gemessen:
+  - {"wertpapierId":1} oder {} → 500. Ursache ist eine NPE bei quantity.signum()
+    in OrderService.java:32.
+  - {"quantity":1} → 400 mit The given id must not be null, einer internen
+    Meldung von Spring Data.
+
+  Bean Validation ist bereits eingebunden (spring-boot-starter-validation), wird
+  aber nicht genutzt. Vorschlag:
+  - In OrderRequest: @NotNull Long wertpapierId, @NotNull @Positive BigDecimal 
+    quantity
+  - Im Controller: @Valid @RequestBody
+  - Im ApiExceptionHandler: MethodArgumentNotValidException → 400
+
+  Die fachliche Prüfung im Service bleibt trotzdem als zweite Absicherung
+  bestehen. Zu jedem Fall gehört ein Test mit fehlendem Feld.
+
+  4. Consider: IllegalArgumentException → 400 deckt zu viel ab
+
+  ApiExceptionHandler.java:18 macht genau, was die Spec verlangt. Damit wird
+  aber jede IllegalArgumentException zum Client-Fehler, auch solche aus
+  Framework und Bibliotheken oder aus Programmierfehlern. Die Exception-Meldung
+  geht dann ungefiltert an den Client. Befund 3 zeigt das bereits: The given id 
+  must not be null landet als 400 beim Aufrufer.
+
+  Besser wäre eine eigene OrderRejectedException bzw.
+  InsufficientBalanceException in app/, die gezielt auf 400 abgebildet wird.
+  Weil das von der Spec abweicht, ist es nur eine Empfehlung.
+
+  5. Required (Tests): Fälle fehlen
+
+  - Guthaben genau gleich totalCost muss erfolgreich sein und 0,00 Restguthaben
+    ergeben. Das prüft compareTo > 0 in Zeile 41, und dort passieren
+    typischerweise Off-by-one-Fehler.
+  - Fehlende oder null-Felder, siehe Befund 3.
+  - Stückzahl mit mehr Nachkommastellen, als gespeichert werden können, siehe
+    Befund 2. Ein solcher Test hätte den Fehler sofort gezeigt.
+  - Nit: Beim unbekannten Depot wird geprüft, ob eine ID nicht existiert, die
+    fest auf 999999 gesetzt ist. Das funktioniert, ist aber anfällig.
+
+  6. FYI: Architektur – Repositories aus infra werden in app benutzt
+
+  OrderService importiert infra.persistence.*. Damit zeigt eine Abhängigkeit von
+  app nach infra, also entgegen der Onion-Richtung aus CLAUDE.md. Das
+  bestehende Muster hat den gleichen Bruch: DepotQueryService importiert sogar
+  Web-DTOs aus infra.web. Der Branch verschlimmert das nicht und ist konsistent.
+  Das sollte aber als eigenes Ticket festgehalten werden, z.B.
+  Repository-Interfaces nach domain/app verschieben.
+
+  7. Nit
+
+  - Mit quantity <= 0 und unbekanntem Depot kommt 400 statt 404. Das ist
+    vertretbar, aber nicht festgelegt.
+  - ifPresentOrElse in OrderService.java:47-49: Ein Zweig verlässt sich auf
+    Dirty Checking, der andere ruft save auf. Das funktioniert, ist aber
+    asymmetrisch. Ein kurzes orElseGet(() -> new Position(...)) gefolgt von add
+    würde das vereinheitlichen.
+  - Diff-Größe: Rund 3.100 Zeilen, davon rund 2.300 Zeilen Gesprächsprotokolle
+    in conversation/ und rund 300 Zeilen in tasks/. Der eigentliche
+    Produktivcode hat nur rund 110 Zeilen. Für eine Übung ist das in Ordnung. In
+    einem echten Repo sollten diese Artefakte nicht im Feature-PR landen.
+  - Die Commit-Präfixe „exercise 3: incremental implementation (…)“ wiederholen
+    sich in jedem Commit. Der Teil in Klammern ist jeweils der eigentlich
+    aussagekräftige Titel.
+
+  ---
+
+  Positiv
+
+  - Der Code ist klein, gut lesbar und hält sich konsequent an die
+    Projektkonventionen: Records, BigDecimal, Konstruktor-Injection, Mapping im
+    Controller.
+  - @Transactional sorgt dafür, dass abgelehnte Orders keine Seiteneffekte
+    haben. Die Tests prüfen das explizit über die GET-Endpoints.
+  - Die Tests sind gut: Jeder legt seine Daten selbst an, die Namen beschreiben
+    das Verhalten, und der Rundungstest ist so gewählt, dass HALF_UP und
+    HALF_EVEN unterschiedliche Ergebnisse liefern (37,53 vs. 37,52).
+
+  Fazit: Änderungen nötig
+
+  Für den Normalfall erfüllt der Branch die Spec vollständig. Gemessen wurden
+  aber zwei Fehler, die Geld und Bestand betreffen:
+  - Parallele Orders verlieren Updates (Befund 1).
+  - Stückzahlen werden stillschweigend gerundet, der Kunde zahlt also für Stück,
+    die er nicht bekommt (Befund 2).
+
+  Dazu kommt ein 500er bei unvollständigem Request (Befund 3). Befunde 1 und 2
+  brauchen jeweils eine kurze fachliche Klärung und eine Ergänzung der Spec.
+  Befund 3 lässt sich direkt mit Bean Validation beheben.
+
+  Soll ich Befund 3 samt Tests direkt umsetzen und für Befunde 1 und 2 einen
+  Vorschlag zur Ergänzung der Spec formulieren?
+
+✻ Crunched for 1m 20s · done 2:40 PM
+
+❯ 1) Das ist erstmal out-of-scope                                               
+  2) Ich würde gerne nur max 2. Nachkommastellen erlauben im Request (gerne per 
+  test fixen)                                                                   
+  3) Gerne per validation.                                                      
+  4) Gerne refactoren zu eigener Exception                                      
+     5, 6, 7) passt erstmal                                                     
+     Commite bitte die fixes einzeln (mit prefix exercise 4:                    
+  code-review-and-quality (<your change>)                                       
+
+⏺ Ich setze das in drei Commits um, jeweils test-first: (3) Validation, (2)
+  maximal 2 Nachkommastellen, (4) eigene Exception.
+
+⏺ Update(src/test/java/de/cofinpro/training/depot/infra/web/OrderControllerInteg
+        rationTest.java)
+  ⎿  Added 39 lines
+      222                  .andExpect(jsonPath("$[0].quantity").value(10)
+           );
+      223      }
+      224  
+      225 +    @Test                                                     
+      226 +    @DisplayName("Fehlende Stückzahl wird mit 400 abgelehnt, o
+          +hne das Guthaben zu verändern")                               
+      227 +    void placeOrder_missingQuantity_returns400WithoutSideEffec
+          +ts() throws Exception {                                       
+      228 +        // given                                              
+      229 +        Depot depot = givenDepot("10000.00");                 
+      230 +        Wertpapier apple = givenWertpapier("AAPL", "150.00"); 
+      231 +                                                              
+      232 +        // when                                               
+      233 +        ResultActions result = placeOrderWithBody(depot.getId(
+          +), """                                                        
+      234 +                { "wertpapierId": %d }                        
+      235 +                """.formatted(apple.getId()));                
+      236 +                                                              
+      237 +        // then                                               
+      238 +        result.andExpect(status().isBadRequest())             
+      239 +                .andExpect(content().string("quantity must not
+          + be null"));                                                  
+      240 +                                                              
+      241 +        mockMvc.perform(get("/api/depots/{id}", depot.getId())
+          +)                                                             
+      242 +                .andExpect(jsonPath("$.cashBalance").value(100
+          +00.00));                                                      
+      243 +    }                                                         
+      244 +                                                              
+      245 +    @Test                                                     
+      246 +    @DisplayName("Fehlende Wertpapier-ID wird mit 400 abgelehn
+          +t, ohne das Guthaben zu verändern")                           
+      247 +    void placeOrder_missingWertpapierId_returns400WithoutSideE
+          +ffects() throws Exception {                                   
+      248 +        // given                                              
+      249 +        Depot depot = givenDepot("10000.00");                 
+      250 +                                                              
+      251 +        // when                                               
+      252 +        ResultActions result = placeOrderWithBody(depot.getId(
+          +), """                                                        
+      253 +                { "quantity": 5.0 }                           
+      254 +                """);                                         
+      255 +                                                              
+      256 +        // then                                               
+      257 +        result.andExpect(status().isBadRequest())             
+      258 +                .andExpect(content().string("wertpapierId must
+          + not be null"));                                              
+      259 +                                                              
+      260 +        mockMvc.perform(get("/api/depots/{id}", depot.getId())
+          +)                                                             
+      261 +                .andExpect(jsonPath("$.cashBalance").value(100
+          +00.00));                                                      
+      262 +    }                                                         
+      263 +                                                              
+      264      private Depot givenDepot(String cashBalance) {
+      265          return depotRepository.save(new Depot(null, "Erika Mus
+           terfrau", new BigDecimal(cashBalance)));
+      266      }
+
+⏺ Update(src/test/java/de/cofinpro/training/depot/infra/web/OrderControllerInteg
+        rationTest.java)
+  ⎿  Added 7 lines, removed 3 lines
+      274      }
+      275  
+      276      private ResultActions placeOrder(long depotId, long wertpa
+           pierId, String quantity) throws Exception {
+      277 +        return placeOrderWithBody(depotId, """                
+      278 +                { "wertpapierId": %d, "quantity": %s }        
+      279 +                """.formatted(wertpapierId, quantity));       
+      280 +    }                                                         
+      281 +                                                              
+      282 +    private ResultActions placeOrderWithBody(long depotId, Str
+          +ing json) throws Exception {                                  
+      283          return mockMvc.perform(post("/api/depots/{id}/orders",
+            depotId)
+      284                  .contentType(MediaType.APPLICATION_JSON)
+      279 -                .content("""                                  
+      280 -                        { "wertpapierId": %d, "quantity": %s }
+      281 -                        """.formatted(wertpapierId, quantity))
+          -);                                                            
+      285 +                .content(json));                              
+      286      }
+      287  }
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Rot wie erwartet. Jetzt die Implementierung:
+
+⏺ Write(src/main/java/de/cofinpro/training/depot/infra/web/OrderRequest.java)
+  ⎿  Added 4 lines, removed 1 line
+      1  package de.cofinpro.training.depot.infra.web;
+      2  
+      3 +import jakarta.validation.constraints.NotNull;                  
+      4 +                                                                
+      5  import java.math.BigDecimal;
+      6  
+      5 -public record OrderRequest(Long wertpapierId, BigDecimal quantit
+        -y) {                                                            
+      7 +public record OrderRequest(@NotNull(message = "wertpapierId must
+        + not be null") Long wertpapierId,                               
+      8 +                           @NotNull(message = "quantity must not
+        + be null") BigDecimal quantity) {                               
+      9  }
+
+⏺ Update(src/main/java/de/cofinpro/training/depot/infra/web/OrderController.java
+        )
+  ⎿  Added 1 line, removed 1 line
+      19      }
+      20  
+      21      @PostMapping("/{depotId}/orders")
+      22 -    public OrderResponse placeOrder(@PathVariable Long depotId,
+         - @RequestBody OrderRequest request) {                          
+      22 +    public OrderResponse placeOrder(@PathVariable Long depotId,
+         + @Valid @RequestBody OrderRequest request) {                   
+      23          OrderConfirmation confirmation = orderService.placeOrde
+          r(depotId, request.wertpapierId(), request.quantity());
+      24          return new OrderResponse(confirmation.wertpapierSymbol(
+          ), confirmation.quantity(),
+      25                  confirmation.pricePerUnit(), confirmation.total
+          Cost(), confirmation.newCashBalance());
+
+⏺ Update(src/main/java/de/cofinpro/training/depot/infra/web/OrderController.java
+        )
+  ⎿  Added 1 line
+      2  
+      3  import de.cofinpro.training.depot.app.OrderConfirmation;
+      4  import de.cofinpro.training.depot.app.OrderService;
+      5 +import jakarta.validation.Valid;                                
+      6  import org.springframework.web.bind.annotation.PathVariable;
+      7  import org.springframework.web.bind.annotation.PostMapping;
+      8  import org.springframework.web.bind.annotation.RequestBody;
+
+⏺ Write(src/main/java/de/cofinpro/training/depot/infra/web/ApiExceptionHandler.j
+       ava)
+  ⎿  Added 12 lines
+       1  package de.cofinpro.training.depot.infra.web;
+       2  
+       3 +import org.springframework.context.support.DefaultMessageSource
+         +Resolvable;                                                    
+       4  import org.springframework.http.HttpStatus;
+       5  import org.springframework.http.ResponseEntity;
+       6 +import org.springframework.web.bind.MethodArgumentNotValidExcep
+         +tion;                                                          
+       7  import org.springframework.web.bind.annotation.ExceptionHandler
+          ;
+       8  import org.springframework.web.bind.annotation.RestControllerAd
+          vice;
+       9  
+      10  import java.util.NoSuchElementException;
+      11 +import java.util.stream.Collectors;                            
+      12  
+      13  @RestControllerAdvice
+      14  public class ApiExceptionHandler {
+     ...
+      22      public ResponseEntity<String> handleBadRequest(IllegalArgum
+          entException ex) {
+      23          return ResponseEntity.status(HttpStatus.BAD_REQUEST).bo
+          dy(ex.getMessage());
+      24      }
+      25 +                                                               
+      26 +    @ExceptionHandler(MethodArgumentNotValidException.class)   
+      27 +    public ResponseEntity<String> handleInvalidRequest(MethodAr
+         +gumentNotValidException ex) {                                  
+      28 +        String message = ex.getBindingResult().getFieldErrors()
+         +.stream()                                                      
+      29 +                .map(DefaultMessageSourceResolvable::getDefault
+         +Message)                                                       
+      30 +                .sorted()                                      
+      31 +                .collect(Collectors.joining("; "));            
+      32 +        return ResponseEntity.status(HttpStatus.BAD_REQUEST).bo
+         +dy(message);                                                   
+      33 +    }                                                          
+      34  }
+
+  Ran 3 shell commands (ctrl+o to expand)
+
+⏺ Jetzt Fix 2 (max. 2 Nachkommastellen), zuerst der Test:
+
+⏺ Update(src/test/java/de/cofinpro/training/depot/infra/web/OrderControllerInteg
+        rationTest.java)
+  ⎿  Added 39 lines
+      222                  .andExpect(jsonPath("$[0].quantity").value(10)
+           );
+      223      }
+      224  
+      225 +    @ParameterizedTest(name = "quantity = {0}")               
+      226 +    @ValueSource(strings = {"0.001", "1.005", "1e-30"})       
+      227 +    @DisplayName("Stückzahl mit mehr als 2 Nachkommastellen wi
+          +rd mit 400 abgelehnt, "                                       
+      228 +            + "ohne Guthaben oder Positionen zu verändern")   
+      229 +    void placeOrder_quantityWithMoreThanTwoDecimals_returns400
+          +WithoutSideEffects(String quantity) throws Exception {        
+      230 +        // given                                              
+      231 +        Depot depot = givenDepot("10000.00");                 
+      232 +        Wertpapier apple = givenWertpapier("AAPL", "150.00"); 
+      233 +        givenPosition(depot, apple, "10");                    
+      234 +                                                              
+      235 +        // when                                               
+      236 +        ResultActions result = placeOrder(depot.getId(), apple
+          +.getId(), quantity);                                          
+      237 +                                                              
+      238 +        // then                                               
+      239 +        result.andExpect(status().isBadRequest())             
+      240 +                .andExpect(content().string("quantity must hav
+          +e at most 2 decimal places"));                                
+      241 +                                                              
+      242 +        mockMvc.perform(get("/api/depots/{id}", depot.getId())
+          +)                                                             
+      243 +                .andExpect(jsonPath("$.cashBalance").value(100
+          +00.00));                                                      
+      244 +        mockMvc.perform(get("/api/depots/{id}/positions", depo
+          +t.getId()))                                                   
+      245 +                .andExpect(jsonPath("$.length()").value(1))   
+      246 +                .andExpect(jsonPath("$[0].quantity").value(10)
+          +);                                                            
+      247 +    }                                                         
+      248 +                                                              
+      249      @Test
+      250 +    @DisplayName("Stückzahl mit überzähligen Nullen nach der 2
+          +. Nachkommastelle wird akzeptiert")                           
+      251 +    void placeOrder_quantityWithTrailingZeros_isAccepted() thr
+          +ows Exception {                                               
+      252 +        // given                                              
+      253 +        Depot depot = givenDepot("10000.00");                 
+      254 +        Wertpapier apple = givenWertpapier("AAPL", "150.00"); 
+      255 +                                                              
+      256 +        // when                                               
+      257 +        ResultActions result = placeOrder(depot.getId(), apple
+          +.getId(), "0.250");                                           
+      258 +                                                              
+      259 +        // then                                               
+      260 +        result.andExpect(status().isOk())                     
+      261 +                .andExpect(jsonPath("$.totalCost").value(37.50
+          +));                                                           
+      262 +    }                                                         
+      263 +                                                              
+      264 +    @Test                                                     
+      265      @DisplayName("Fehlende Stückzahl wird mit 400 abgelehnt, o
+           hne das Guthaben zu verändern")
+      266      void placeOrder_missingQuantity_returns400WithoutSideEffec
+           ts() throws Exception {
+      267          // given
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Die drei Tests mit zu vielen Nachkommastellen schlagen noch fehl, während der
+  Test mit überzähligen Nullen bereits grün ist. Als Nächstes implementiere ich
+  die Prüfung mit @Digits.
+
+⏺ Write(src/main/java/de/cofinpro/training/depot/infra/web/OrderRequest.java)
+  ⎿  Added 9 lines, removed 1 line
+       1  package de.cofinpro.training.depot.infra.web;
+       2  
+       3 +import jakarta.validation.constraints.Digits;                  
+       4  import jakarta.validation.constraints.NotNull;
+       5  
+       6  import java.math.BigDecimal;
+       7  
+       8 +/**                                                            
+       9 + * quantity ist auf 2 Nachkommastellen begrenzt, weil Position.
+         +quantity mit                                                   
+      10 + * Scale 2 persistiert wird (Hibernate-Default numeric(38,2)) u
+         +nd sonst beim                                                  
+      11 + * Speichern stillschweigend gerundet würde.                   
+      12 + */                                                            
+      13  public record OrderRequest(@NotNull(message = "wertpapierId mus
+          t not be null") Long wertpapierId,
+       8 -                           @NotNull(message = "quantity must no
+         -t be null") BigDecimal quantity) {                             
+      14 +                           @NotNull(message = "quantity must no
+         +t be null")                                                    
+      15 +                           @Digits(integer = 36, fraction = 2, 
+         +message = "quantity must have at most 2 decimal places")       
+      16 +                           BigDecimal quantity) {              
+      17  }
+
+  Searched for 1 pattern, ran 1 shell command (ctrl+o to expand)
+
+⏺ Der Schutztest hat gezeigt, dass Hibernates @Digits überzählige Nullen nicht
+  entfernt und 0.250 deshalb ablehnt. Ich ersetze es durch eine
+  @AssertTrue-Prüfung mit stripTrailingZeros().
+
+⏺ Write(src/main/java/de/cofinpro/training/depot/infra/web/OrderRequest.java)
+  ⎿  Added 12 lines, removed 9 lines
+       1  package de.cofinpro.training.depot.infra.web;
+       2  
+       3 -import jakarta.validation.constraints.Digits;                  
+       3 +import jakarta.validation.constraints.AssertTrue;              
+       4  import jakarta.validation.constraints.NotNull;
+       5  
+       6  import java.math.BigDecimal;
+       7  
+       8 -/**                                                            
+       9 - * quantity ist auf 2 Nachkommastellen begrenzt, weil Position.
+         -quantity mit                                                   
+      10 - * Scale 2 persistiert wird (Hibernate-Default numeric(38,2)) u
+         -nd sonst beim                                                  
+      11 - * Speichern stillschweigend gerundet würde.                   
+      12 - */                                                            
+       8  public record OrderRequest(@NotNull(message = "wertpapierId mus
+          t not be null") Long wertpapierId,
+      14 -                           @NotNull(message = "quantity must no
+         -t be null")                                                    
+      15 -                           @Digits(integer = 36, fraction = 2, 
+         -message = "quantity must have at most 2 decimal places")       
+      16 -                           BigDecimal quantity) {              
+       9 +                           @NotNull(message = "quantity must no
+         +t be null") BigDecimal quantity) {                             
+      10 +                                                               
+      11 +    /**                                                        
+      12 +     * Position.quantity wird mit Scale 2 persistiert (Hibernat
+         +e-Default                                                      
+      13 +     * numeric(38,2)) und würde sonst beim Speichern stillschwe
+         +igend gerundet.                                                
+      14 +     * Überzählige Nullen (z.B. 0.250) sind erlaubt, daher kein
+         + @Digits.                                                      
+      15 +     */                                                        
+      16 +    @AssertTrue(message = "quantity must have at most 2 decimal
+         + places")                                                      
+      17 +    boolean isQuantityScaleValid() {                           
+      18 +        return quantity == null || quantity.stripTrailingZeros(
+         +).scale() <= 2;                                                
+      19 +    }                                                          
+      20  }
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Grün. Ich ergänze auch die Fehlertabelle in der Spec, damit sie zum Code
+  passt:
+
+⏺ Update(docs/specs/ticket-142-kauforder.md)
+  ⎿  Added 2 lines
+      77  |---|---|---|
+      78  | Depot nicht gefunden | 404 | `Depot not found: {id}` |
+      79  | Wertpapier nicht gefunden | 404 | `Wertpapier not found: {id}
+          ` |
+      80 +| `wertpapierId` bzw. `quantity` fehlt | 400 | `wertpapierId mu
+         +st not be null` / `quantity must not be null` |                
+      81  | `quantity <= 0` | 400 | `Quantity must be positive` |
+      82 +| `quantity` mit mehr als 2 Nachkommastellen | 400 | `quantity 
+         +must have at most 2 decimal places` |                          
+      83  | Guthaben reicht nicht | 400 | `Insufficient balance: required
+           {totalCost}, available {cashBalance}` |
+      84  
+      85  Abgelehnte Orders dürfen keine Seiteneffekte haben (kein teilwe
+          iser Abzug vom
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Jetzt Fix 4, ein Refactoring, das das Verhalten nicht ändert. Die bestehenden
+  Tests für 400 sichern es ab:
+
+⏺ Write(src/main/java/de/cofinpro/training/depot/app/OrderRejectedException.java
+       )
+  ⎿  Wrote 12 lines to src/main/java/de/cofinpro/training/depot/app/OrderRe
+     jectedException.java
+       1 package de.cofinpro.training.depot.app;
+       2 
+       3 /**
+       4  * Fachliche Ablehnung einer Order (z.B. ungültige Stückzahl, un
+         zureichendes
+       5  * Guthaben). Wird im ApiExceptionHandler auf 400 abgebildet.
+       6  */
+       7 public class OrderRejectedException extends RuntimeException {
+       8 
+       9     public OrderRejectedException(String message) {
+     … +3 lines (ctrl+o to expand)
+
+⏺ Update(src/main/java/de/cofinpro/training/depot/app/OrderService.java)
+  ⎿  Added 1 line, removed 1 line
+      30      @Transactional
+      31      public OrderConfirmation placeOrder(Long depotId, Long wert
+          papierId, BigDecimal quantity) {
+      32          if (quantity.signum() <= 0) {
+      33 -            throw new IllegalArgumentException("Quantity must b
+         -e positive");                                                  
+      33 +            throw new OrderRejectedException("Quantity must be 
+         +positive");                                                    
+      34          }
+      35          Depot depot = depotRepository.findById(depotId)
+      36                  .orElseThrow(() -> new NoSuchElementException("
+          Depot not found: " + depotId));
+
+⏺ Update(src/main/java/de/cofinpro/training/depot/app/OrderService.java)
+  ⎿  Added 1 line, removed 1 line
+      39  
+      40          BigDecimal totalCost = quantity.multiply(wertpapier.get
+          Price()).setScale(2, RoundingMode.HALF_UP);
+      41          if (totalCost.compareTo(depot.getCashBalance()) > 0) {
+      42 -            throw new IllegalArgumentException(                
+      42 +            throw new OrderRejectedException(                  
+      43                      "Insufficient balance: required " + totalCo
+          st + ", available " + depot.getCashBalance());
+      44          }
+      45  
+
+⏺ Update(src/main/java/de/cofinpro/training/depot/infra/web/ApiExceptionHandler.
+        java)
+  ⎿  Added 2 lines, removed 2 lines
+      18          return ResponseEntity.status(HttpStatus.NOT_FOUND).body
+          (ex.getMessage());
+      19      }
+      20  
+      21 -    @ExceptionHandler(IllegalArgumentException.class)          
+      22 -    public ResponseEntity<String> handleBadRequest(IllegalArgum
+         -entException ex) {                                             
+      21 +    @ExceptionHandler(OrderRejectedException.class)            
+      22 +    public ResponseEntity<String> handleOrderRejected(OrderReje
+         +ctedException ex) {                                            
+      23          return ResponseEntity.status(HttpStatus.BAD_REQUEST).bo
+          dy(ex.getMessage());
+      24      }
+      25  
+
+⏺ Update(src/main/java/de/cofinpro/training/depot/infra/web/ApiExceptionHandler.
+        java)
+  ⎿  Added 1 line
+      1  package de.cofinpro.training.depot.infra.web;
+      2  
+      3 +import de.cofinpro.training.depot.app.OrderRejectedException;   
+      4  import org.springframework.context.support.DefaultMessageSourceR
+         esolvable;
+      5  import org.springframework.http.HttpStatus;
+      6  import org.springframework.http.ResponseEntity;
+
+⏺ Update(docs/specs/ticket-142-kauforder.md)
+  ⎿  Added 6 lines, removed 2 lines
+      103  - Fehlerfälle als Exceptions, gemappt über `ApiExceptionHandle
+           r`:
+      104    - `NoSuchElementException` → 404 (bereits vorhanden, wiederv
+           erwendet für
+      105      Depot/Wertpapier-Lookup)
+      106 -  - `IllegalArgumentException` → 400 (neu zu ergänzen, für Stü
+          -ckzahl- und                                                   
+      107 -    Guthaben-Validierung)                                     
+      106 +  - `OrderRejectedException` (in `app/`) → 400, für Stückzahl-
+          + und                                                          
+      107 +    Guthaben-Validierung. Bewusst keine generische            
+      108 +    `IllegalArgumentException`, damit Framework- und Programmi
+          +erfehler                                                      
+      109 +    nicht als 400 mit interner Meldung beim Client landen.    
+      110 +  - `MethodArgumentNotValidException` → 400, für Bean Validati
+          +on des                                                        
+      111 +    Request-Bodys (fehlende Felder, zu viele Nachkommastellen)
+      112  
+      113  ## Testing Strategy
+      114  
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+⏺ Alle drei Fixes sind als eigene Commits auf excerise-test (nicht gepusht).
+  Nach jedem Commit lief ./gradlew test grün, am Ende 20 Tests, davon 16 in
+  OrderControllerIntegrationTest. Die neuen Tests habe ich jeweils zuerst
+  geschrieben und vor dem Fix scheitern sehen.
+
+  Commit: 691d91f
+  Fix: 3) Validation
+  Was sich ändert: OrderRequest prüft beide Felder mit @NotNull, der Controller
+  nutzt @Valid. ApiExceptionHandler macht aus MethodArgumentNotValidException
+  eine 400. Neue Tests für fehlendes quantity und fehlende wertpapierId prüfen
+  auch, dass das Guthaben unverändert bleibt.
+  ────────────────────────────────────────
+  Commit: fdb08da
+  Fix: 2) Max. 2 Nachkommastellen
+  Was sich ändert: Stückzahlen wie 0.001, 1.005 oder 1e-30 werden mit 400
+  abgelehnt (quantity must have at most 2 decimal places), ohne Seiteneffekte.
+  Die Fehlertabelle in der Spec ist um diesen Fall und die fehlenden Felder
+  ergänzt.
+  ────────────────────────────────────────
+  Commit: 677412a
+  Fix: 4) Eigene Exception
+  Was sich ändert: Neue app/OrderRejectedException ersetzt die generische
+  IllegalArgumentException. Nur noch sie wird auf 400 abgebildet, andere
+  IllegalArgumentExceptions landen jetzt als 500. Die API verhält sich sonst
+  gleich, die bestehenden 400-Tests decken das ab. Spec (Code Style) ist
+  angepasst.
+
+  Bei Fix 2 bin ich von einer Annahme abgewichen: Ich wollte zuerst
+  @Digits(fraction = 2) nehmen. Das lehnt aber auch 0.250 ab, weil es
+  überzählige Nullen mitzählt. Das hat ein Schutztest gezeigt, den ich dafür
+  geschrieben hatte. Jetzt prüft eine @AssertTrue-Methode in OrderRequest mit
+  stripTrailingZeros().scale() <= 2. Damit gilt 0.250 als 2 Nachkommastellen und
+  wird akzeptiert. Wenn du überzählige Nullen lieber auch ablehnen willst, ist
+  das eine Zeile.
+
+  Befund 1 (parallele Orders) und Befunde 5–7 habe ich wie besprochen nicht
+  angefasst.
+
+✻ Worked for 2m 23s · done 2:49 PM
