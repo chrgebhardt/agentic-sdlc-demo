@@ -6,6 +6,7 @@ import de.cofinpro.training.depot.domain.Wertpapier;
 import de.cofinpro.training.depot.infra.persistence.DepotRepository;
 import de.cofinpro.training.depot.infra.persistence.PositionRepository;
 import de.cofinpro.training.depot.infra.persistence.WertpapierRepository;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -54,6 +55,9 @@ class OrderControllerIntegrationTest {
 
     @Autowired
     private PositionRepository positionRepository;
+
+    @Autowired
+    private EntityManager entityManager;
 
     @Test
     @DisplayName("Kauf auf bestehende Position liefert Bestätigung mit Stückzahl, Preis, "
@@ -130,6 +134,10 @@ class OrderControllerIntegrationTest {
                 .andExpect(jsonPath("$.totalCost").value(240.00))
                 .andExpect(jsonPath("$.newCashBalance").value(9760.00));
 
+        // Persistenzkontext leeren, damit die Positionen so gelesen werden, wie sie
+        // persistiert sind (Scale 2), statt als ungespeicherte Instanzen aus dem Test.
+        entityManager.flush();
+        entityManager.clear();
         mockMvc.perform(get("/api/depots/{id}/positions", depot.getId()))
                 .andExpect(jsonPath("$.length()").value(2))
                 .andExpect(jsonPath("$[?(@.wertpapierSymbol == 'SAP')].quantity").value(contains(2.0)))
