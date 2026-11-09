@@ -37,8 +37,9 @@ public class OrderService {
         BigDecimal totalCost = quantity.multiply(wertpapier.getPrice()).setScale(2, RoundingMode.HALF_UP);
 
         depot.setCashBalance(depot.getCashBalance().subtract(totalCost));
-        Position position = positionRepository.findByDepotIdAndWertpapierId(depotId, wertpapierId).orElseThrow();
-        position.setQuantity(position.getQuantity().add(quantity));
+        positionRepository.findByDepotIdAndWertpapierId(depotId, wertpapierId).ifPresentOrElse(
+                position -> position.setQuantity(position.getQuantity().add(quantity)),
+                () -> positionRepository.save(new Position(null, depot, wertpapier, quantity)));
 
         return new OrderConfirmation(wertpapier.getSymbol(), quantity, wertpapier.getPrice(), totalCost,
                 depot.getCashBalance());
