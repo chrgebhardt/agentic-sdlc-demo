@@ -1,0 +1,1084 @@
+ ▐▛███▛█   Claude Code v2.1.311
+▝▜██████▀  Opus 5.5 · Claude Team
+ ▝▝   ▝▝   ~/Desktop/Cofinpro/Training/agentic-sdlc-demo
+
+  Opus 5.5 is now your default model and it draws down usage faster than Sonnet 5. Switch anytime with /model.
+
+❯ /clear                                                                        
+
+❯ /test-driven-development lass uns zusammen die integration tests zur          
+@docs/specs/ticket-142-kauforder.md definieren, implementiere nur die tests und 
+wir diskutieren darüber                                                         
+  ⎿  Read docs/specs/ticket-142-kauforder.md (163 lines)
+
+  Read 1 file, ran 1 shell command (ctrl+o to expand)
+
+⏺ Write(src/test/java/de/cofinpro/training/depot/infra/web/DepotControllerIntegr
+       ationTest.java)
+  ⎿  Added 167 lines
+       1  package de.cofinpro.training.depot.infra.web;
+       2  
+       3  import org.junit.jupiter.api.Test;
+       4 +import org.junit.jupiter.params.ParameterizedTest;             
+       5 +import org.junit.jupiter.params.provider.ValueSource;          
+       6  import org.springframework.beans.factory.annotation.Autowired;
+       7  import org.springframework.boot.webmvc.test.autoconfigure.AutoC
+          onfigureMockMvc;
+       8  import org.springframework.boot.test.context.SpringBootTest;
+       9 +import org.springframework.http.MediaType;                     
+      10  import org.springframework.test.web.servlet.MockMvc;
+      11 +import org.springframework.transaction.annotation.Transactional
+         +;                                                              
+      12  
+      13 +import static org.hamcrest.Matchers.contains;                  
+      14  import static org.springframework.test.web.servlet.request.Mock
+          MvcRequestBuilders.get;
+      15 +import static org.springframework.test.web.servlet.request.Mock
+         +MvcRequestBuilders.post;                                       
+      16 +import static org.springframework.test.web.servlet.result.MockM
+         +vcResultMatchers.content;                                      
+      17  import static org.springframework.test.web.servlet.result.MockM
+          vcResultMatchers.jsonPath;
+      18  import static org.springframework.test.web.servlet.result.MockM
+          vcResultMatchers.status;
+      19  
+      20 +/**                                                            
+      21 + * Demo-Daten (DemoDataLoader): Depot 1 mit 10000.00 Guthaben, 
+      22 + * Wertpapiere 1=AAPL (150.00), 2=SAP (120.00), 3=DTE (20.00), 
+      23 + * bestehende Position: 10 x AAPL.                             
+      24 + *                                                             
+      25 + * Jeder Test läuft in einer Transaktion, die danach zurückgero
+         +llt wird,                                                      
+      26 + * damit schreibende Order-Tests die Demo-Daten für andere Test
+         +s nicht verändern.                                             
+      27 + */                                                            
+      28  @SpringBootTest
+      29  @AutoConfigureMockMvc
+      30 +@Transactional                                                 
+      31  class DepotControllerIntegrationTest {
+      32  
+      33      @Autowired
+     ...
+       55                  .andExpect(jsonPath("$[0].quantity").value(10)
+           )
+       56                  .andExpect(jsonPath("$[0].currentPrice").value
+           (150.00));
+       57      }
+       58 +                                                              
+       59 +    // --- TICKET-142: POST /api/depots/{depotId}/orders ---  
+       60 +                                                              
+       61 +    @Test                                                     
+       62 +    void placeOrder_onExistingPosition_returnsConfirmation() t
+          +hrows Exception {                                             
+       63 +        mockMvc.perform(post("/api/depots/1/orders")          
+       64 +                        .contentType(MediaType.APPLICATION_JSO
+          +N)                                                            
+       65 +                        .content("""                          
+       66 +                                { "wertpapierId": 1, "quantity
+          +": 5.0 }                                                      
+       67 +                                """))                         
+       68 +                .andExpect(status().isOk())                   
+       69 +                .andExpect(jsonPath("$.wertpapierSymbol").valu
+          +e("AAPL"))                                                    
+       70 +                .andExpect(jsonPath("$.quantity").value(5.0)) 
+       71 +                .andExpect(jsonPath("$.pricePerUnit").value(15
+          +0.00))                                                        
+       72 +                .andExpect(jsonPath("$.totalCost").value(750.0
+          +0))                                                           
+       73 +                .andExpect(jsonPath("$.newCashBalance").value(
+          +9250.00));                                                    
+       74 +    }                                                         
+       75 +                                                              
+       76 +    @Test                                                     
+       77 +    void placeOrder_onExistingPosition_reducesCashBalance() th
+          +rows Exception {                                              
+       78 +        mockMvc.perform(post("/api/depots/1/orders")          
+       79 +                        .contentType(MediaType.APPLICATION_JSO
+          +N)                                                            
+       80 +                        .content("""                          
+       81 +                                { "wertpapierId": 1, "quantity
+          +": 5.0 }                                                      
+       82 +                                """))                         
+       83 +                .andExpect(status().isOk());                  
+       84 +                                                              
+       85 +        mockMvc.perform(get("/api/depots/1"))                 
+       86 +                .andExpect(jsonPath("$.cashBalance").value(925
+          +0.00));                                                       
+       87 +    }                                                         
+       88 +                                                              
+       89 +    @Test                                                     
+       90 +    void placeOrder_onExistingPosition_increasesQuantityWithou
+          +tDuplicatePosition() throws Exception {                       
+       91 +        mockMvc.perform(post("/api/depots/1/orders")          
+       92 +                        .contentType(MediaType.APPLICATION_JSO
+          +N)                                                            
+       93 +                        .content("""                          
+       94 +                                { "wertpapierId": 1, "quantity
+          +": 5.0 }                                                      
+       95 +                                """))                         
+       96 +                .andExpect(status().isOk());                  
+       97 +                                                              
+       98 +        mockMvc.perform(get("/api/depots/1/positions"))       
+       99 +                .andExpect(jsonPath("$.length()").value(1))   
+      100 +                .andExpect(jsonPath("$[0].wertpapierSymbol").v
+          +alue("AAPL"))                                                 
+      101 +                .andExpect(jsonPath("$[0].quantity").value(15.
+          +0));                                                          
+      102 +    }                                                         
+      103 +                                                              
+      104 +    @Test                                                     
+      105 +    void placeOrder_withoutExistingPosition_createsNewPosition
+          +() throws Exception {                                         
+      106 +        mockMvc.perform(post("/api/depots/1/orders")          
+      107 +                        .contentType(MediaType.APPLICATION_JSO
+          +N)                                                            
+      108 +                        .content("""                          
+      109 +                                { "wertpapierId": 2, "quantity
+          +": 2 }                                                        
+      110 +                                """))                         
+      111 +                .andExpect(status().isOk())                   
+      112 +                .andExpect(jsonPath("$.wertpapierSymbol").valu
+          +e("SAP"))                                                     
+      113 +                .andExpect(jsonPath("$.totalCost").value(240.0
+          +0))                                                           
+      114 +                .andExpect(jsonPath("$.newCashBalance").value(
+          +9760.00));                                                    
+      115 +                                                              
+      116 +        mockMvc.perform(get("/api/depots/1/positions"))       
+      117 +                .andExpect(jsonPath("$.length()").value(2))   
+      118 +                .andExpect(jsonPath("$[?(@.wertpapierSymbol ==
+          + 'SAP')].quantity").value(contains(2.0)))                     
+      119 +                .andExpect(jsonPath("$[?(@.wertpapierSymbol ==
+          + 'AAPL')].quantity").value(contains(10.0)));                  
+      120 +    }                                                         
+      121 +                                                              
+      122 +    @Test                                                     
+      123 +    void placeOrder_spendingExactlyTheFullBalance_isAccepted()
+          + throws Exception {                                           
+      124 +        // 500 x DTE à 20.00 = 10000.00 — Grenzfall: "überstei
+          +gt" heißt >, nicht >=                                         
+      125 +        mockMvc.perform(post("/api/depots/1/orders")          
+      126 +                        .contentType(MediaType.APPLICATION_JSO
+          +N)                                                            
+      127 +                        .content("""                          
+      128 +                                { "wertpapierId": 3, "quantity
+          +": 500 }                                                      
+      129 +                                """))                         
+      130 +                .andExpect(status().isOk())                   
+      131 +                .andExpect(jsonPath("$.totalCost").value(10000
+          +.00))                                                         
+      132 +                .andExpect(jsonPath("$.newCashBalance").value(
+          +0.00));                                                       
+      133 +    }                                                         
+      134 +                                                              
+      135 +    @Test                                                     
+      136 +    void placeOrder_roundsTotalCostToTwoDecimalsHalfUp() throw
+          +s Exception {                                                 
+      137 +        // Open Question 1 (Annahme): 0.333 x 20.00 = 6.66 (ro
+          +h: 6.66000) — 0.3335 x 20.00 = 6.67 (roh: 6.67000)            
+      138 +        // Fraktionale Stückzahl, damit die Rundung tatsächlic
+          +h greift: 0.12345 x 20.00 = 2.469 → 2.47                      
+      139 +        mockMvc.perform(post("/api/depots/1/orders")          
+      140 +                        .contentType(MediaType.APPLICATION_JSO
+          +N)                                                            
+      141 +                        .content("""                          
+      142 +                                { "wertpapierId": 3, "quantity
+          +": 0.12345 }                                                  
+      143 +                                """))                         
+      144 +                .andExpect(status().isOk())                   
+      145 +                .andExpect(jsonPath("$.totalCost").value(2.47)
+          +)                                                             
+      146 +                .andExpect(jsonPath("$.newCashBalance").value(
+          +9997.53));                                                    
+      147 +    }                                                         
+      148 +                                                              
+      149 +    @Test                                                     
+      150 +    void placeOrder_unknownDepot_returns404() throws Exception
+          + {                                                            
+      151 +        mockMvc.perform(post("/api/depots/999/orders")        
+      152 +                        .contentType(MediaType.APPLICATION_JSO
+          +N)                                                            
+      153 +                        .content("""                          
+      154 +                                { "wertpapierId": 1, "quantity
+          +": 5.0 }                                                      
+      155 +                                """))                         
+      156 +                .andExpect(status().isNotFound())             
+      157 +                .andExpect(content().string("Depot not found: 
+          +999"));                                                       
+      158 +    }                                                         
+      159 +                                                              
+      160 +    @Test                                                     
+      161 +    void placeOrder_unknownWertpapier_returns404WithoutSideEff
+          +ects() throws Exception {                                     
+      162 +        mockMvc.perform(post("/api/depots/1/orders")          
+      163 +                        .contentType(MediaType.APPLICATION_JSO
+          +N)                                                            
+      164 +                        .content("""                          
+      165 +                                { "wertpapierId": 999, "quanti
+          +ty": 5.0 }                                                    
+      166 +                                """))                         
+      167 +                .andExpect(status().isNotFound())             
+      168 +                .andExpect(content().string("Wertpapier not fo
+          +und: 999"));                                                  
+      169 +                                                              
+      170 +        mockMvc.perform(get("/api/depots/1"))                 
+      171 +                .andExpect(jsonPath("$.cashBalance").value(100
+          +00.00));                                                      
+      172 +    }                                                         
+      173 +                                                              
+      174 +    @ParameterizedTest                                        
+      175 +    @ValueSource(strings = {"0", "-1", "-0.5"})               
+      176 +    void placeOrder_nonPositiveQuantity_returns400WithoutSideE
+          +ffects(String quantity) throws Exception {                    
+      177 +        mockMvc.perform(post("/api/depots/1/orders")          
+      178 +                        .contentType(MediaType.APPLICATION_JSO
+          +N)                                                            
+      179 +                        .content("""                          
+      180 +                                { "wertpapierId": 1, "quantity
+          +": %s }                                                       
+      181 +                                """.formatted(quantity)))     
+      182 +                .andExpect(status().isBadRequest())           
+      183 +                .andExpect(content().string("Quantity must be 
+          +positive"));                                                  
+      184 +                                                              
+      185 +        mockMvc.perform(get("/api/depots/1"))                 
+      186 +                .andExpect(jsonPath("$.cashBalance").value(100
+          +00.00));                                                      
+      187 +        mockMvc.perform(get("/api/depots/1/positions"))       
+      188 +                .andExpect(jsonPath("$.length()").value(1))   
+      189 +                .andExpect(jsonPath("$[0].quantity").value(10)
+          +);                                                            
+      190 +    }                                                         
+      191 +                                                              
+      192 +    @Test                                                     
+      193 +    void placeOrder_exceedingCashBalance_returns400WithoutSide
+          +Effects() throws Exception {                                  
+      194 +        // 100 x AAPL à 150.00 = 15000.00 > 10000.00          
+      195 +        mockMvc.perform(post("/api/depots/1/orders")          
+      196 +                        .contentType(MediaType.APPLICATION_JSO
+          +N)                                                            
+      197 +                        .content("""                          
+      198 +                                { "wertpapierId": 1, "quantity
+          +": 100 }                                                      
+      199 +                                """))                         
+      200 +                .andExpect(status().isBadRequest())           
+      201 +                .andExpect(content().string("Insufficient bala
+          +nce: required 15000.00, available 10000.00"));                
+      202 +                                                              
+      203 +        mockMvc.perform(get("/api/depots/1"))                 
+      204 +                .andExpect(jsonPath("$.cashBalance").value(100
+          +00.00));                                                      
+      205 +        mockMvc.perform(get("/api/depots/1/positions"))       
+      206 +                .andExpect(jsonPath("$.length()").value(1))   
+      207 +                .andExpect(jsonPath("$[0].quantity").value(10)
+          +);                                                            
+      208 +    }                                                         
+      209  }
+
+⏺ Oops, the rounding-test comment got muddled; let me clean it up.
+
+⏺ Update(src/test/java/de/cofinpro/training/depot/infra/web/DepotControllerInteg
+        rationTest.java)
+  ⎿  Added 2 lines, removed 2 lines
+      134  
+      135      @Test
+      136      void placeOrder_roundsTotalCostToTwoDecimalsHalfUp() throw
+           s Exception {
+      137 -        // Open Question 1 (Annahme): 0.333 x 20.00 = 6.66 (ro
+          -h: 6.66000) — 0.3335 x 20.00 = 6.67 (roh: 6.67000)            
+      138 -        // Fraktionale Stückzahl, damit die Rundung tatsächlic
+          -h greift: 0.12345 x 20.00 = 2.469 → 2.47                      
+      137 +        // Spec Open Question 1 (Annahme: 2 Nachkommastellen, 
+          +HALF_UP):                                                     
+      138 +        // 0.12345 x 20.00 = 2.4690000 (roh) → 2.47           
+      139          mockMvc.perform(post("/api/depots/1/orders")
+      140                          .contentType(MediaType.APPLICATION_JSO
+           N)
+      141                          .content("""
+
+  Searched for 1 pattern, ran 1 shell command (ctrl+o to expand)
+
+⏺ Ich habe die Integrationstests in src/test/java/de/cofinpro/training/depot/inf
+  ra/web/DepotControllerIntegrationTest.java ergänzt. Wie erwartet sind sie rot:
+  12 der 15 Tests schlagen fehl, die 3 bestehenden GET-Tests laufen weiter
+  grün. Alle 12 scheitern aus dem richtigen Grund, weil der Endpoint noch fehlt.
+  Es gibt keine Compile-Fehler und keine Probleme mit dem Setup.
+
+  Testfälle
+
+  ┌─────┬──────────────────────────────────────────────────────┬─────────────┐
+  │  #  │                         Test                         │ Spec-Bezug  │
+  ├─────┼──────────────────────────────────────────────────────┼─────────────┤
+  │ 1   │ placeOrder_onExistingPosition_returnsConfirmation: 5 │ Fall 1      │
+  │     │  × AAPL → 200 mit allen 5 Response-Feldern           │             │
+  ├─────┼──────────────────────────────────────────────────────┼─────────────┤
+  │     │ …_reducesCashBalance: danach zeigt GET /depots/1     │ Fall 1,     │
+  │ 2   │ 9250.00                                              │ Success     │
+  │     │                                                      │ Criterion 2 │
+  ├─────┼──────────────────────────────────────────────────────┼─────────────┤
+  │     │ …_increasesQuantityWithoutDuplicatePosition: AAPL    │ Fall 1,     │
+  │ 3   │ steht danach auf 15, es gibt weiterhin genau 1       │ Open        │
+  │     │ Position                                             │ Question 2  │
+  ├─────┼──────────────────────────────────────────────────────┼─────────────┤
+  │ 4   │ placeOrder_withoutExistingPosition_createsNewPositio │ Fall 2      │
+  │     │ n: 2 × SAP → neue Position, AAPL bleibt bei 10       │             │
+  ├─────┼──────────────────────────────────────────────────────┼─────────────┤
+  │ 5   │ placeOrder_unknownDepot_returns404                   │ Fall 3      │
+  ├─────┼──────────────────────────────────────────────────────┼─────────────┤
+  │ 6   │ placeOrder_unknownWertpapier_returns404WithoutSideEf │ Fall 4      │
+  │     │ fects                                                │             │
+  ├─────┼──────────────────────────────────────────────────────┼─────────────┤
+  │     │ placeOrder_nonPositiveQuantity_…: parametrisiert mit │             │
+  │ 7   │  0, -1, -0.5, prüft auch, dass nichts verändert      │ Fall 5      │
+  │     │ wurde                                                │             │
+  ├─────┼──────────────────────────────────────────────────────┼─────────────┤
+  │     │ placeOrder_exceedingCashBalance_…: 100 × AAPL =      │             │
+  │ 8   │ 15000 > 10000, prüft auch, dass nichts verändert     │ Fall 6      │
+  │     │ wurde                                                │             │
+  ├─────┼──────────────────────────────────────────────────────┼─────────────┤
+  │     │ Zusätzlich:                                          │ Grenzfall „ │
+  │ 9   │ placeOrder_spendingExactlyTheFullBalance_isAccepted: │ übersteigt“ │
+  │     │  500 × DTE = genau 10000.00 → 200                    │             │
+  ├─────┼──────────────────────────────────────────────────────┼─────────────┤
+  │     │ Zusätzlich:                                          │ Open        │
+  │ 10  │ placeOrder_roundsTotalCostToTwoDecimalsHalfUp:       │ Question 1  │
+  │     │ 0.12345 × 20.00 → 2.47                               │             │
+  └─────┴──────────────────────────────────────────────────────┴─────────────┘
+
+  Diskussionspunkte
+
+  1. Isolation über @Transactional auf der Testklasse. Die Order-Tests ändern
+     die gemeinsame H2-Datenbank. Ohne Rollback würden die bestehenden GET-Tests
+     (Guthaben 10000, AAPL 10) je nach Reihenfolge zufällig fehlschlagen.
+     MockMvc läuft im selben Thread wie der Test, deshalb funktioniert der
+     Rollback. Der Haken: Die Tests sehen kein echtes Commit. Ein fehlendes
+     @Transactional im OrderService würde damit nicht auffallen. Die Alternative
+     wäre @DirtiesContext, das ist echter, aber deutlich langsamer.
+  2. Prüfung von außen statt über Repositories. Die Seiteneffekte prüfe ich über
+     die bestehenden GET-Endpoints und nicht direkt über die Repositories.
+     Damit bleibt der Test vom inneren Aufbau unabhängig.
+  3. Fehlertexte werden exakt geprüft. Beim unbekannten Depot liefert der Test
+     schon heute 404, weil die Route nicht existiert. Nur der Vergleich des
+     Fehlertexts macht diesen Test überhaupt rot. Ohne ihn wäre es ein
+     falsch-grüner Test.
+  4. Format der Beträge in der Guthaben-Meldung. Ich prüfe genau "required 
+     15000.00, available 10000.00". Das setzt voraus, dass totalCost mit 2
+     Nachkommastellen ausgegeben wird. Wenn ihr die rohe Multiplikation wollt
+     (Open Question 1), käme 15000.0000 heraus.
+  5. Test 9 und 10 gehen über die Spec hinaus. Test 9 legt fest, dass
+     „übersteigt“ strikt größer heißt. Test 10 macht die bisher nur angenommene
+     Rundungsregel verbindlich. Wollt ihr beide behalten?
+  6. Bewusst nicht abgedeckt: fehlende Felder (wertpapierId oder quantity gleich
+     null), ein kaputter JSON-Body und negative oder zu viele Nachkommastellen.
+     Dazu sagt die Spec nichts. Sollen dafür eigene 400-Fälle mit in den Scope?
+
+  Was davon wollt ihr übernehmen oder ändern, bevor wir mit GREEN anfangen?
+
+✻ Brewed for 1m 31s · done 1:57 PM
+
+❯ Schreibe die Tests in eine neue Klasse OrderControllerIntegrationTest         
+
+⏺ Bash(git checkout -- src/test/java/de/cofinpro/training/depot/infra/web/DepotC
+      ontrollerIntegrationTest.java && git status --short)
+  ⎿  Updated src/test/java/de/cofinpro/training/depot/infra/web/DepotContro
+     llerIntegrationTest.java (+0 -167)
+  ⎿  (a git step in this command can move the working tree, so these may be
+     its changes, not edits) (ctrl+o to expand)
+
+⏺ Write(src/test/java/de/cofinpro/training/depot/infra/web/OrderControllerIntegr
+       ationTest.java)
+  ⎿  Wrote 186 lines to src/test/java/de/cofinpro/training/depot/infra/web/
+     OrderControllerIntegrationTest.java
+       1 package de.cofinpro.training.depot.infra.web;
+       2 
+       3 import org.junit.jupiter.api.Test;
+       4 import org.junit.jupiter.params.ParameterizedTest;
+       5 import org.junit.jupiter.params.provider.ValueSource;
+       6 import org.springframework.beans.factory.annotation.Autowired;
+       7 import org.springframework.boot.webmvc.test.autoconfigure.AutoCo
+         nfigureMockMvc;
+       8 import org.springframework.boot.test.context.SpringBootTest;
+       9 import org.springframework.http.MediaType;
+     … +177 lines (ctrl+o to expand)
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Die Order-Tests stehen jetzt in einer eigenen Klasse,
+  OrderControllerIntegrationTest.java. Die Tests selbst sind unverändert, auch
+  der Klassenkommentar zu den Demo-Daten ist mit umgezogen.
+
+  DepotControllerIntegrationTest ist wieder im Originalzustand. Weil die
+  Order-Tests dort raus sind, braucht diese Klasse kein @Transactional mehr.
+
+  Stand der ganzen Testsuite: 16 Tests, davon 12 rot, nämlich genau die
+  Order-Tests, weil der Endpoint noch fehlt. Die 4 bestehenden Tests sind grün.
+
+  Zwei Punkte zur Diskussion:
+
+  - Abweichung von der Spec: Unter „Project Structure“ steht in
+    docs/specs/ticket-142-kauforder.md noch, dass DepotControllerIntegrationTest
+    ergänzt wird. Sollen wir die Spec anpassen? Damit verbunden ist die Frage
+    aus der Spec (Open Question 3), ob der Endpoint selbst auch in einen eigenen
+    OrderController kommt. Bisher ist er im DepotController vorgesehen, und der
+    Testname würde dann nicht mehr dazu passen.
+  - Isolation: Beide Testklassen benutzen denselben Spring-Context und damit
+    dieselbe H2-Datenbank. Dass die Order-Tests die Depot-Tests nicht stören,
+    hängt allein am @Transactional auf OrderControllerIntegrationTest. Wer dort
+    einen Test ohne Rollback ergänzt, macht die GET-Tests in
+    DepotControllerIntegrationTest abhängig von der Reihenfolge, in der die
+    Tests laufen.
+
+✻ Cooked for 45s · done 1:59 PM
+
+❯ 1) schreibe die Tests gerne in given/when/then struktur und füge einen        
+  entsprechenden display name hinzu                                             
+  2) die tests enthalten einige implizite annahmen (bspw. die cashBalance       
+  nachher kennt man nur, wenn man den anfangszustand kennt), könntest du dieses 
+  setup bitte explizit im test setzen?                                          
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+⏺ Write(src/test/java/de/cofinpro/training/depot/infra/web/OrderControllerIntegr
+       ationTest.java)
+  ⎿  Added 163 lines, removed 82 lines
+       1  package de.cofinpro.training.depot.infra.web;
+       2  
+       3 +import de.cofinpro.training.depot.domain.Depot;                
+       4 +import de.cofinpro.training.depot.domain.Position;             
+       5 +import de.cofinpro.training.depot.domain.Wertpapier;           
+       6 +import de.cofinpro.training.depot.infra.persistence.DepotReposi
+         +tory;                                                          
+       7 +import de.cofinpro.training.depot.infra.persistence.PositionRep
+         +ository;                                                       
+       8 +import de.cofinpro.training.depot.infra.persistence.WertpapierR
+         +epository;                                                     
+       9 +import org.junit.jupiter.api.DisplayName;                      
+      10  import org.junit.jupiter.api.Test;
+      11  import org.junit.jupiter.params.ParameterizedTest;
+      12  import org.junit.jupiter.params.provider.ValueSource;
+      13  import org.springframework.beans.factory.annotation.Autowired;
+       7 -import org.springframework.boot.webmvc.test.autoconfigure.AutoC
+         -onfigureMockMvc;                                               
+      14  import org.springframework.boot.test.context.SpringBootTest;
+      15 +import org.springframework.boot.webmvc.test.autoconfigure.AutoC
+         +onfigureMockMvc;                                               
+      16  import org.springframework.http.MediaType;
+      17  import org.springframework.test.web.servlet.MockMvc;
+      18 +import org.springframework.test.web.servlet.ResultActions;     
+      19  import org.springframework.transaction.annotation.Transactional
+          ;
+      20  
+      21 +import java.math.BigDecimal;                                   
+      22 +                                                               
+      23 +import static org.assertj.core.api.Assertions.assertThat;      
+      24  import static org.hamcrest.Matchers.contains;
+      25  import static org.springframework.test.web.servlet.request.Mock
+          MvcRequestBuilders.get;
+      26  import static org.springframework.test.web.servlet.request.Mock
+          MvcRequestBuilders.post;
+     ...
+      31  /**
+      32   * TICKET-142: POST /api/depots/{depotId}/orders
+      33   *
+      23 - * Demo-Daten (DemoDataLoader): Depot 1 mit 10000.00 Guthaben, 
+      24 - * Wertpapiere 1=AAPL (150.00), 2=SAP (120.00), 3=DTE (20.00), 
+      25 - * bestehende Position: 10 x AAPL.                             
+      26 - *                                                             
+      27 - * Jeder Test läuft in einer Transaktion, die danach zurückgero
+         -llt wird,                                                      
+      28 - * damit schreibende Order-Tests die Demo-Daten für andere Test
+         -s nicht verändern.                                             
+      34 + * Jeder Test legt seine Ausgangsdaten (Depot, Wertpapiere, Pos
+         +itionen) im                                                    
+      35 + * given-Block selbst an und hängt nicht von den Demo-Daten des
+         + DemoDataLoader ab.                                            
+      36 + * Jeder Test läuft in einer Transaktion, die danach zurückgero
+         +llt wird.                                                      
+      37   */
+      38  @SpringBootTest
+      39  @AutoConfigureMockMvc
+      40  @Transactional
+      41 +@DisplayName("POST /api/depots/{depotId}/orders – Kauforder auf
+         +geben")                                                        
+      42  class OrderControllerIntegrationTest {
+      43  
+      44 +    private static final long UNKNOWN_ID = 999_999L;           
+      45 +                                                               
+      46      @Autowired
+      47      private MockMvc mockMvc;
+      48  
+      49 +    @Autowired                                                 
+      50 +    private DepotRepository depotRepository;                   
+      51 +                                                               
+      52 +    @Autowired                                                 
+      53 +    private WertpapierRepository wertpapierRepository;         
+      54 +                                                               
+      55 +    @Autowired                                                 
+      56 +    private PositionRepository positionRepository;             
+      57 +                                                               
+      58      @Test
+      59 +    @DisplayName("Kauf auf bestehende Position liefert Bestätig
+         +ung mit Stückzahl, Preis, Gesamtkosten und neuem Guthaben")    
+      60      void placeOrder_onExistingPosition_returnsConfirmation() th
+          rows Exception {
+      40 -        mockMvc.perform(post("/api/depots/1/orders")           
+      41 -                        .contentType(MediaType.APPLICATION_JSON
+         -)                                                              
+      42 -                        .content("""                           
+      43 -                                { "wertpapierId": 1, "quantity"
+         -: 5.0 }                                                        
+      44 -                                """))                          
+      45 -                .andExpect(status().isOk())                    
+      61 +        // given                                               
+      62 +        Depot depot = givenDepot("10000.00");                  
+      63 +        Wertpapier apple = givenWertpapier("AAPL", "150.00");  
+      64 +        givenPosition(depot, apple, "10");                     
+      65 +                                                               
+      66 +        // when                                                
+      67 +        ResultActions result = placeOrder(depot.getId(), apple.
+         +getId(), "5.0");                                               
+      68 +                                                               
+      69 +        // then                                                
+      70 +        result.andExpect(status().isOk())                      
+      71                  .andExpect(jsonPath("$.wertpapierSymbol").value
+          ("AAPL"))
+      72                  .andExpect(jsonPath("$.quantity").value(5.0))
+      73                  .andExpect(jsonPath("$.pricePerUnit").value(150
+          .00))
+     ...
+       76      }
+       77  
+       78      @Test
+       79 +    @DisplayName("Kauf reduziert das Guthaben des Depots um di
+          +e Gesamtkosten")                                              
+       80      void placeOrder_onExistingPosition_reducesCashBalance() th
+           rows Exception {
+       55 -        mockMvc.perform(post("/api/depots/1/orders")          
+       56 -                        .contentType(MediaType.APPLICATION_JSO
+          -N)                                                            
+       57 -                        .content("""                          
+       58 -                                { "wertpapierId": 1, "quantity
+          -": 5.0 }                                                      
+       59 -                                """))                         
+       81 +        // given                                              
+       82 +        Depot depot = givenDepot("10000.00");                 
+       83 +        Wertpapier apple = givenWertpapier("AAPL", "150.00"); 
+       84 +        givenPosition(depot, apple, "10");                    
+       85 +                                                              
+       86 +        // when                                               
+       87 +        placeOrder(depot.getId(), apple.getId(), "5.0")       
+       88                  .andExpect(status().isOk());
+       89  
+       62 -        mockMvc.perform(get("/api/depots/1"))                 
+       90 +        // then                                               
+       91 +        mockMvc.perform(get("/api/depots/{id}", depot.getId())
+          +)                                                             
+       92                  .andExpect(jsonPath("$.cashBalance").value(925
+           0.00));
+       93      }
+       94  
+       95      @Test
+       96 +    @DisplayName("Kauf auf bestehende Position erhöht deren St
+          +ückzahl, statt eine zweite Position anzulegen")               
+       97      void placeOrder_onExistingPosition_increasesQuantityWithou
+           tDuplicatePosition() throws Exception {
+       68 -        mockMvc.perform(post("/api/depots/1/orders")          
+       69 -                        .contentType(MediaType.APPLICATION_JSO
+          -N)                                                            
+       70 -                        .content("""                          
+       71 -                                { "wertpapierId": 1, "quantity
+          -": 5.0 }                                                      
+       72 -                                """))                         
+       98 +        // given                                              
+       99 +        Depot depot = givenDepot("10000.00");                 
+      100 +        Wertpapier apple = givenWertpapier("AAPL", "150.00"); 
+      101 +        givenPosition(depot, apple, "10");                    
+      102 +                                                              
+      103 +        // when                                               
+      104 +        placeOrder(depot.getId(), apple.getId(), "5.0")       
+      105                  .andExpect(status().isOk());
+      106  
+       75 -        mockMvc.perform(get("/api/depots/1/positions"))       
+      107 +        // then                                               
+      108 +        mockMvc.perform(get("/api/depots/{id}/positions", depo
+          +t.getId()))                                                   
+      109                  .andExpect(jsonPath("$.length()").value(1))
+      110                  .andExpect(jsonPath("$[0].wertpapierSymbol").v
+           alue("AAPL"))
+      111                  .andExpect(jsonPath("$[0].quantity").value(15.
+           0));
+      112      }
+      113  
+      114      @Test
+      115 +    @DisplayName("Erstkauf eines Wertpapiers legt eine neue Po
+          +sition an und lässt bestehende Positionen unverändert")       
+      116      void placeOrder_withoutExistingPosition_createsNewPosition
+           () throws Exception {
+       83 -        mockMvc.perform(post("/api/depots/1/orders")          
+       84 -                        .contentType(MediaType.APPLICATION_JSO
+          -N)                                                            
+       85 -                        .content("""                          
+       86 -                                { "wertpapierId": 2, "quantity
+          -": 2 }                                                        
+       87 -                                """))                         
+       88 -                .andExpect(status().isOk())                   
+      117 +        // given                                              
+      118 +        Depot depot = givenDepot("10000.00");                 
+      119 +        Wertpapier apple = givenWertpapier("AAPL", "150.00"); 
+      120 +        Wertpapier sap = givenWertpapier("SAP", "120.00");    
+      121 +        givenPosition(depot, apple, "10");                    
+      122 +                                                              
+      123 +        // when                                               
+      124 +        ResultActions result = placeOrder(depot.getId(), sap.g
+          +etId(), "2");                                                 
+      125 +                                                              
+      126 +        // then                                               
+      127 +        result.andExpect(status().isOk())                     
+      128                  .andExpect(jsonPath("$.wertpapierSymbol").valu
+           e("SAP"))
+      129                  .andExpect(jsonPath("$.totalCost").value(240.0
+           0))
+      130                  .andExpect(jsonPath("$.newCashBalance").value(
+           9760.00));
+      131  
+       93 -        mockMvc.perform(get("/api/depots/1/positions"))       
+      132 +        mockMvc.perform(get("/api/depots/{id}/positions", depo
+          +t.getId()))                                                   
+      133                  .andExpect(jsonPath("$.length()").value(2))
+      134                  .andExpect(jsonPath("$[?(@.wertpapierSymbol ==
+            'SAP')].quantity").value(contains(2.0)))
+      135                  .andExpect(jsonPath("$[?(@.wertpapierSymbol ==
+            'AAPL')].quantity").value(contains(10.0)));
+      136      }
+      137  
+      138      @Test
+      139 +    @DisplayName("Kauf, der das Guthaben exakt aufbraucht, wir
+          +d ausgeführt (Grenzfall: nur > Guthaben wird abgelehnt)")     
+      140      void placeOrder_spendingExactlyTheFullBalance_isAccepted()
+            throws Exception {
+      101 -        // 500 x DTE à 20.00 = 10000.00 — Grenzfall: "überstei
+          -gt" heißt >, nicht >=                                         
+      102 -        mockMvc.perform(post("/api/depots/1/orders")          
+      103 -                        .contentType(MediaType.APPLICATION_JSO
+          -N)                                                            
+      104 -                        .content("""                          
+      105 -                                { "wertpapierId": 3, "quantity
+          -": 500 }                                                      
+      106 -                                """))                         
+      107 -                .andExpect(status().isOk())                   
+      141 +        // given                                              
+      142 +        Depot depot = givenDepot("10000.00");                 
+      143 +        Wertpapier telekom = givenWertpapier("DTE", "20.00"); 
+      144 +                                                              
+      145 +        // when: 500 x 20.00 = 10000.00                       
+      146 +        ResultActions result = placeOrder(depot.getId(), telek
+          +om.getId(), "500");                                           
+      147 +                                                              
+      148 +        // then                                               
+      149 +        result.andExpect(status().isOk())                     
+      150                  .andExpect(jsonPath("$.totalCost").value(10000
+           .00))
+      151                  .andExpect(jsonPath("$.newCashBalance").value(
+           0.00));
+      152      }
+      153  
+      154      @Test
+      155 +    @DisplayName("Gesamtkosten werden auf 2 Nachkommastellen k
+          +aufmännisch gerundet (HALF_UP)")                              
+      156      void placeOrder_roundsTotalCostToTwoDecimalsHalfUp() throw
+           s Exception {
+      114 -        // Spec Open Question 1 (Annahme: 2 Nachkommastellen, 
+          -HALF_UP):                                                     
+      115 -        // 0.12345 x 20.00 = 2.4690000 (roh) → 2.47           
+      116 -        mockMvc.perform(post("/api/depots/1/orders")          
+      117 -                        .contentType(MediaType.APPLICATION_JSO
+          -N)                                                            
+      118 -                        .content("""                          
+      119 -                                { "wertpapierId": 3, "quantity
+          -": 0.12345 }                                                  
+      120 -                                """))                         
+      121 -                .andExpect(status().isOk())                   
+      157 +        // given                                              
+      158 +        Depot depot = givenDepot("10000.00");                 
+      159 +        Wertpapier telekom = givenWertpapier("DTE", "20.00"); 
+      160 +                                                              
+      161 +        // when: 0.12345 x 20.00 = 2.4690000 (roh)            
+      162 +        ResultActions result = placeOrder(depot.getId(), telek
+          +om.getId(), "0.12345");                                       
+      163 +                                                              
+      164 +        // then: Spec Open Question 1 (Annahme: 2 Nachkommaste
+          +llen, HALF_UP)                                                
+      165 +        result.andExpect(status().isOk())                     
+      166                  .andExpect(jsonPath("$.totalCost").value(2.47)
+           )
+      167                  .andExpect(jsonPath("$.newCashBalance").value(
+           9997.53));
+      168      }
+      169  
+      170      @Test
+      171 +    @DisplayName("Unbekanntes Depot wird mit 404 abgelehnt")  
+      172      void placeOrder_unknownDepot_returns404() throws Exception
+            {
+      128 -        mockMvc.perform(post("/api/depots/999/orders")        
+      129 -                        .contentType(MediaType.APPLICATION_JSO
+          -N)                                                            
+      130 -                        .content("""                          
+      131 -                                { "wertpapierId": 1, "quantity
+          -": 5.0 }                                                      
+      132 -                                """))                         
+      133 -                .andExpect(status().isNotFound())             
+      134 -                .andExpect(content().string("Depot not found: 
+          -999"));                                                       
+      173 +        // given                                              
+      174 +        Wertpapier apple = givenWertpapier("AAPL", "150.00"); 
+      175 +        assertThat(depotRepository.existsById(UNKNOWN_ID)).isF
+          +alse();                                                       
+      176 +                                                              
+      177 +        // when                                               
+      178 +        ResultActions result = placeOrder(UNKNOWN_ID, apple.ge
+          +tId(), "5.0");                                                
+      179 +                                                              
+      180 +        // then                                               
+      181 +        result.andExpect(status().isNotFound())               
+      182 +                .andExpect(content().string("Depot not found: 
+          +" + UNKNOWN_ID));                                             
+      183      }
+      184  
+      185      @Test
+      186 +    @DisplayName("Unbekanntes Wertpapier wird mit 404 abgelehn
+          +t, ohne das Guthaben zu verändern")                           
+      187      void placeOrder_unknownWertpapier_returns404WithoutSideEff
+           ects() throws Exception {
+      139 -        mockMvc.perform(post("/api/depots/1/orders")          
+      140 -                        .contentType(MediaType.APPLICATION_JSO
+          -N)                                                            
+      141 -                        .content("""                          
+      142 -                                { "wertpapierId": 999, "quanti
+          -ty": 5.0 }                                                    
+      143 -                                """))                         
+      144 -                .andExpect(status().isNotFound())             
+      145 -                .andExpect(content().string("Wertpapier not fo
+          -und: 999"));                                                  
+      188 +        // given                                              
+      189 +        Depot depot = givenDepot("10000.00");                 
+      190 +        assertThat(wertpapierRepository.existsById(UNKNOWN_ID)
+          +).isFalse();                                                  
+      191  
+      147 -        mockMvc.perform(get("/api/depots/1"))                 
+      192 +        // when                                               
+      193 +        ResultActions result = placeOrder(depot.getId(), UNKNO
+          +WN_ID, "5.0");                                                
+      194 +                                                              
+      195 +        // then                                               
+      196 +        result.andExpect(status().isNotFound())               
+      197 +                .andExpect(content().string("Wertpapier not fo
+          +und: " + UNKNOWN_ID));                                        
+      198 +                                                              
+      199 +        mockMvc.perform(get("/api/depots/{id}", depot.getId())
+          +)                                                             
+      200                  .andExpect(jsonPath("$.cashBalance").value(100
+           00.00));
+      201      }
+      202  
+      151 -    @ParameterizedTest                                        
+      203 +    @ParameterizedTest(name = "quantity = {0}")               
+      204      @ValueSource(strings = {"0", "-1", "-0.5"})
+      205 +    @DisplayName("Nicht-positive Stückzahl wird mit 400 abgele
+          +hnt, ohne Guthaben oder Positionen zu verändern")             
+      206      void placeOrder_nonPositiveQuantity_returns400WithoutSideE
+           ffects(String quantity) throws Exception {
+      154 -        mockMvc.perform(post("/api/depots/1/orders")          
+      155 -                        .contentType(MediaType.APPLICATION_JSO
+          -N)                                                            
+      156 -                        .content("""                          
+      157 -                                { "wertpapierId": 1, "quantity
+          -": %s }                                                       
+      158 -                                """.formatted(quantity)))     
+      159 -                .andExpect(status().isBadRequest())           
+      207 +        // given                                              
+      208 +        Depot depot = givenDepot("10000.00");                 
+      209 +        Wertpapier apple = givenWertpapier("AAPL", "150.00"); 
+      210 +        givenPosition(depot, apple, "10");                    
+      211 +                                                              
+      212 +        // when                                               
+      213 +        ResultActions result = placeOrder(depot.getId(), apple
+          +.getId(), quantity);                                          
+      214 +                                                              
+      215 +        // then                                               
+      216 +        result.andExpect(status().isBadRequest())             
+      217                  .andExpect(content().string("Quantity must be 
+           positive"));
+      218  
+      162 -        mockMvc.perform(get("/api/depots/1"))                 
+      219 +        mockMvc.perform(get("/api/depots/{id}", depot.getId())
+          +)                                                             
+      220                  .andExpect(jsonPath("$.cashBalance").value(100
+           00.00));
+      164 -        mockMvc.perform(get("/api/depots/1/positions"))       
+      221 +        mockMvc.perform(get("/api/depots/{id}/positions", depo
+          +t.getId()))                                                   
+      222                  .andExpect(jsonPath("$.length()").value(1))
+      223                  .andExpect(jsonPath("$[0].quantity").value(10)
+           );
+      224      }
+      225  
+      226      @Test
+      227 +    @DisplayName("Bestellwert über dem Guthaben wird mit 400 a
+          +bgelehnt, ohne Guthaben oder Positionen zu verändern")        
+      228      void placeOrder_exceedingCashBalance_returns400WithoutSide
+           Effects() throws Exception {
+      171 -        // 100 x AAPL à 150.00 = 15000.00 > 10000.00          
+      172 -        mockMvc.perform(post("/api/depots/1/orders")          
+      173 -                        .contentType(MediaType.APPLICATION_JSO
+          -N)                                                            
+      174 -                        .content("""                          
+      175 -                                { "wertpapierId": 1, "quantity
+          -": 100 }                                                      
+      176 -                                """))                         
+      177 -                .andExpect(status().isBadRequest())           
+      178 -                .andExpect(content().string("Insufficient bala
+          -nce: required 15000.00, available 10000.00"));                
+      229 +        // given                                              
+      230 +        Depot depot = givenDepot("1000.00");                  
+      231 +        Wertpapier apple = givenWertpapier("AAPL", "150.00"); 
+      232 +        givenPosition(depot, apple, "10");                    
+      233  
+      180 -        mockMvc.perform(get("/api/depots/1"))                 
+      181 -                .andExpect(jsonPath("$.cashBalance").value(100
+          -00.00));                                                      
+      182 -        mockMvc.perform(get("/api/depots/1/positions"))       
+      234 +        // when: 10 x 150.00 = 1500.00 > 1000.00              
+      235 +        ResultActions result = placeOrder(depot.getId(), apple
+          +.getId(), "10");                                              
+      236 +                                                              
+      237 +        // then                                               
+      238 +        result.andExpect(status().isBadRequest())             
+      239 +                .andExpect(content().string("Insufficient bala
+          +nce: required 1500.00, available 1000.00"));                  
+      240 +                                                              
+      241 +        mockMvc.perform(get("/api/depots/{id}", depot.getId())
+          +)                                                             
+      242 +                .andExpect(jsonPath("$.cashBalance").value(100
+          +0.00));                                                       
+      243 +        mockMvc.perform(get("/api/depots/{id}/positions", depo
+          +t.getId()))                                                   
+      244                  .andExpect(jsonPath("$.length()").value(1))
+      245                  .andExpect(jsonPath("$[0].quantity").value(10)
+           );
+      246      }
+      247 +                                                              
+      248 +    private Depot givenDepot(String cashBalance) {            
+      249 +        return depotRepository.save(new Depot(null, "Erika Mus
+          +terfrau", new BigDecimal(cashBalance)));                      
+      250 +    }                                                         
+      251 +                                                              
+      252 +    private Wertpapier givenWertpapier(String symbol, String p
+          +rice) {                                                       
+      253 +        return wertpapierRepository.save(new Wertpapier(null, 
+          +symbol, symbol + " Testwertpapier", new BigDecimal(price)));  
+      254 +    }                                                         
+      255 +                                                              
+      256 +    private void givenPosition(Depot depot, Wertpapier wertpap
+          +ier, String quantity) {                                       
+      257 +        positionRepository.save(new Position(null, depot, wert
+          +papier, new BigDecimal(quantity)));                           
+      258 +    }                                                         
+      259 +                                                              
+      260 +    private ResultActions placeOrder(long depotId, long wertpa
+          +pierId, String quantity) throws Exception {                   
+      261 +        return mockMvc.perform(post("/api/depots/{id}/orders",
+          + depotId)                                                     
+      262 +                .contentType(MediaType.APPLICATION_JSON)      
+      263 +                .content("""                                  
+      264 +                        { "wertpapierId": %d, "quantity": %s }
+      265 +                        """.formatted(wertpapierId, quantity))
+          +);                                                            
+      266 +    }                                                         
+      267  }
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Ich habe OrderControllerIntegrationTest umgebaut. Die Suite hat jetzt 16
+  Tests, davon sind 12 rot. Das sind die Order-Tests, und sie scheitern alle,
+  weil der Endpoint noch fehlt.
+
+  1) Given/When/Then und Display-Namen
+  - Jeder Test ist in // given, // when und // then gegliedert.
+  - Jeder Test hat einen deutschen @DisplayName, zum Beispiel „Kauf, der das
+    Guthaben exakt aufbraucht, wird ausgeführt (Grenzfall: nur > Guthaben wird
+    abgelehnt)“.
+  - Die Klasse heißt im Report „POST /api/depots/{depotId}/orders – Kauforder
+    aufgeben“.
+  - Beim parametrisierten Test steht im Report zusätzlich der jeweilige Wert,
+    zum Beispiel quantity = -0.5.
+
+  2) Ausgangszustand steht im Test
+  - Jeder Test legt im given-Block sein eigenes Depot, seine Wertpapiere und
+    Positionen an. Dafür gibt es kleine Hilfsmethoden: givenDepot("10000.00"),
+    givenWertpapier("AAPL", "150.00") und givenPosition(depot, apple, "10").
+  - Die Tests verwenden nur noch die IDs der selbst angelegten Datensätze. Sie
+    hängen nicht mehr von den Daten des DemoDataLoader ab, also weder von „Depot
+    1“ noch von „Wertpapier 2 = SAP“.
+  - Auch die Rechnung ist jetzt aus dem Test ablesbar: Das Guthaben vorher steht
+    im given-Block, das Guthaben nachher im then-Block.
+  - Bei den 404-Tests prüft der given-Block, dass es die ID wirklich nicht gibt
+    (assertThat(depotRepository.existsById(UNKNOWN_ID)).isFalse()). Vorher war
+    das nur stillschweigend angenommen.
+  - Der Test mit zu wenig Guthaben arbeitet jetzt mit kleineren Zahlen: 1000.00
+    Guthaben, Kauf über 10 × 150.00.
+
+  Zur Diskussion
+  - Setup über Repositories: Der given-Block füllt die Datenbank direkt über die
+    Repositories, weil es noch keine API gibt, um Depots anzulegen. Geprüft
+    wird weiterhin von außen, über GET /api/depots/{id} und /positions. Die
+    Tests kennen damit die Persistenz-Schicht.
+  - DemoDataLoader läuft weiter mit: Die Demo-Daten stehen also trotzdem in der
+    Datenbank. Das stört nicht, weil jeder Test nur sein eigenes Depot abfragt.
+    Wenn wir das ganz sauber haben wollen, könnten wir den Loader in Tests über
+    ein Profil abschalten. Dann bräuchte aber auch
+    DepotControllerIntegrationTest ein eigenes Setup.
+  - Kleine Hilfsmethoden: givenDepot, placeOrder und Co. sind ein Kompromiss
+    zwischen gut lesbaren und kurzen Tests. Die Zahlen, auf die es ankommt,
+    stehen trotzdem in jedem Test selbst.
+
+✻ Brewed for 1m 5s · done 2:03 PM
+
+❯ Ich würde den test für "spending exactly rausnehmen" und den "rounds two      
+  decimals half up" würde ich mit in den standard case ziehen                   
+
+⏺ Update(src/test/java/de/cofinpro/training/depot/infra/web/OrderControllerInteg
+        rationTest.java)
+  ⎿  Added 10 lines, removed 9 lines
+      56      private PositionRepository positionRepository;
+      57  
+      58      @Test
+      59 -    @DisplayName("Kauf auf bestehende Position liefert Bestätig
+         -ung mit Stückzahl, Preis, Gesamtkosten und neuem Guthaben")    
+      59 +    @DisplayName("Kauf auf bestehende Position liefert Bestätig
+         +ung mit Stückzahl, Preis, "                                    
+      60 +            + "auf 2 Nachkommastellen kaufmännisch gerundeten G
+         +esamtkosten (HALF_UP) und neuem Guthaben")                     
+      61      void placeOrder_onExistingPosition_returnsConfirmation() th
+          rows Exception {
+      62          // given
+      63          Depot depot = givenDepot("10000.00");
+      63 -        Wertpapier apple = givenWertpapier("AAPL", "150.00");  
+      64 +        Wertpapier apple = givenWertpapier("AAPL", "150.10");  
+      65          givenPosition(depot, apple, "10");
+      66  
+      66 -        // when                                                
+      67 -        ResultActions result = placeOrder(depot.getId(), apple.
+         -getId(), "5.0");                                               
+      67 +        // when: 0.25 x 150.10 = 37.525 (roh)                  
+      68 +        ResultActions result = placeOrder(depot.getId(), apple.
+         +getId(), "0.25");                                              
+      69  
+      69 -        // then                                                
+      70 +        // then: HALF_UP → 37.53 (HALF_EVEN ergäbe 37.52), Spec
+         + Open Question 1                                               
+      71          result.andExpect(status().isOk())
+      72                  .andExpect(jsonPath("$.wertpapierSymbol").value
+          ("AAPL"))
+      72 -                .andExpect(jsonPath("$.quantity").value(5.0))  
+      73 -                .andExpect(jsonPath("$.pricePerUnit").value(150
+         -.00))                                                          
+      74 -                .andExpect(jsonPath("$.totalCost").value(750.00
+         -))                                                             
+      75 -                .andExpect(jsonPath("$.newCashBalance").value(9
+         -250.00));                                                      
+      73 +                .andExpect(jsonPath("$.quantity").value(0.25)) 
+      74 +                .andExpect(jsonPath("$.pricePerUnit").value(150
+         +.10))                                                          
+      75 +                .andExpect(jsonPath("$.totalCost").value(37.53)
+         +)                                                              
+      76 +                .andExpect(jsonPath("$.newCashBalance").value(9
+         +962.47));                                                      
+      77      }
+      78  
+      79      @Test
+
+⏺ Update(src/test/java/de/cofinpro/training/depot/infra/web/OrderControllerInteg
+        rationTest.java)
+  ⎿  Removed 32 lines
+      137      }
+      138  
+      139      @Test
+      140 -    @DisplayName("Kauf, der das Guthaben exakt aufbraucht, wir
+          -d ausgeführt (Grenzfall: nur > Guthaben wird abgelehnt)")     
+      141 -    void placeOrder_spendingExactlyTheFullBalance_isAccepted()
+          - throws Exception {                                           
+      142 -        // given                                              
+      143 -        Depot depot = givenDepot("10000.00");                 
+      144 -        Wertpapier telekom = givenWertpapier("DTE", "20.00"); 
+      145 -                                                              
+      146 -        // when: 500 x 20.00 = 10000.00                       
+      147 -        ResultActions result = placeOrder(depot.getId(), telek
+          -om.getId(), "500");                                           
+      148 -                                                              
+      149 -        // then                                               
+      150 -        result.andExpect(status().isOk())                     
+      151 -                .andExpect(jsonPath("$.totalCost").value(10000
+          -.00))                                                         
+      152 -                .andExpect(jsonPath("$.newCashBalance").value(
+          -0.00));                                                       
+      153 -    }                                                         
+      154 -                                                              
+      155 -    @Test                                                     
+      156 -    @DisplayName("Gesamtkosten werden auf 2 Nachkommastellen k
+          -aufmännisch gerundet (HALF_UP)")                              
+      157 -    void placeOrder_roundsTotalCostToTwoDecimalsHalfUp() throw
+          -s Exception {                                                 
+      158 -        // given                                              
+      159 -        Depot depot = givenDepot("10000.00");                 
+      160 -        Wertpapier telekom = givenWertpapier("DTE", "20.00"); 
+      161 -                                                              
+      162 -        // when: 0.12345 x 20.00 = 2.4690000 (roh)            
+      163 -        ResultActions result = placeOrder(depot.getId(), telek
+          -om.getId(), "0.12345");                                       
+      164 -                                                              
+      165 -        // then: Spec Open Question 1 (Annahme: 2 Nachkommaste
+          -llen, HALF_UP)                                                
+      166 -        result.andExpect(status().isOk())                     
+      167 -                .andExpect(jsonPath("$.totalCost").value(2.47)
+          -)                                                             
+      168 -                .andExpect(jsonPath("$.newCashBalance").value(
+          -9997.53));                                                    
+      169 -    }                                                         
+      170 -                                                              
+      171 -    @Test                                                     
+      140      @DisplayName("Unbekanntes Depot wird mit 404 abgelehnt")
+      141      void placeOrder_unknownDepot_returns404() throws Exception
+            {
+      142          // given
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Ich habe den Grenzfall-Test für exakt aufgebrauchtes Guthaben entfernt und den
+  eigenen Rundungstest in den Standardfall übernommen. Die Suite hat jetzt 14
+  Tests, davon sind 10 rot. Das sind alle Order-Tests, und sie scheitern weiter
+  nur daran, dass der Endpoint noch fehlt.
+
+  Standardfall placeOrder_onExistingPosition_returnsConfirmation:
+  - given: Guthaben 10000.00, AAPL zu 150.10, bestehende Position mit 10 Stück
+  - when: Kauf von 0.25 Stück, roh ergibt das 37.525
+  - then: totalCost 37.53 und newCashBalance 9962.47
+  - Der Display-Name nennt jetzt ausdrücklich die Rundung auf 2 Nachkommastellen
+    mit HALF_UP.
+
+  Die Zahlen sind so gewählt, dass die Rundungsregel wirklich geprüft wird. Bei
+  37.525 liefert HALF_UP 37.53, die Banker's-Rundung (HALF_EVEN) dagegen 37.52.
+  Der Test würde also auch scheitern, wenn jemand versehentlich
+  RoundingMode.HALF_EVEN nimmt oder gar nicht rundet. Mit dem alten Beispiel
+  (0.12345 × 20.00 = 2.469) wäre das nicht aufgefallen, weil beide Regeln dort
+  dasselbe Ergebnis liefern.
+
+  Zur Diskussion: Der Standardfall hat jetzt eine Bruchstückzahl (0.25). Dadurch
+  prüft er nebenbei, dass Bruchstücke erlaubt sind. Die Spec sagt dazu nichts
+  ausdrücklich, im API-Beispiel steht nur 5.0. Wenn nur ganze Stückzahlen
+  erlaubt sein sollen, müssen wir die Rundung über einen Preis mit mehr
+  Nachkommastellen testen.
+
+  Die beiden Tests daneben (Guthaben wird reduziert, Stückzahl wird erhöht)
+  rechnen weiter mit 5 × 150.00, also ohne Rundung. Sollen sie dasselbe Szenario
+  wie der Standardfall verwenden?
+✻ Brewed for 32s · done 2:12 PM

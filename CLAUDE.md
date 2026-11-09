@@ -9,7 +9,7 @@ Hintergrund und Quellen): Abhängigkeiten zeigen nach innen, `infra` → `app` �
 `domain`.
 
 - `domain/` – JPA-Entities: `Depot`, `Wertpapier`, `Position`
-- `app/` – Fachlogik / Anwendungsfälle (z.B. `DepotQueryService`)
+- `app/` – Fachlogik / Anwendungsfälle (z.B. `DepotQueryService`, `OrderService`)
 - `infra/web/` – REST-Controller und Response-DTOs
 - `infra/persistence/` – Spring Data JPA Repositories
 - `infra/` (root) – `DemoDataLoader` (Demo-Datenbefüllung)
@@ -28,11 +28,14 @@ Hintergrund und Quellen): Abhängigkeiten zeigen nach innen, `infra` → `app` �
 
 - `GET /api/depots/{id}` – Depot-Stammdaten
 - `GET /api/depots/{id}/positions` – Positionen eines Depots
+- `POST /api/depots/{id}/orders` – Kauforder sofort ausführen (TICKET-142)
 
 ## Konventionen
 
 - Geldbeträge und Stückzahlen werden als `BigDecimal` modelliert, nie als
   `double`/`float`.
-- Response-Objekte sind Java Records unter `infra/web/`.
+- Response-Objekte sind Java Records unter `infra/web/`. Services in `app/`
+  geben eigene Records zurück (z.B. `OrderConfirmation`), das Mapping auf
+  Response-DTOs passiert im Controller.
 - Fehlerfälle werden über `ApiExceptionHandler` auf passende HTTP-Status
   abgebildet.
